@@ -256,33 +256,18 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
 
-      <View style={[styles.header, { marginTop: headerHeight ? 0 : 40 }]}>
-        <Text style={styles.title}>Today's Tasks</Text>
-        <Text style={styles.subtitle}>
-          {completedCount} completed · {postponedCount} postponed
-        </Text>
-
-        {/* Offline Mode Toggle */}
-        <OfflineModeToggle />
-
-        {/* Connection Status */}
-        <View style={styles.connectionStatus}>
-          <View
-            style={[
-              styles.statusIndicator,
-              {
-                backgroundColor:
-                  isConnected && !offlineMode ? "#4caf50" : "#f44336",
-              },
-            ]}
-          />
-          <Text style={styles.connectionText}>
-            {offlineMode
-              ? "Offline Mode Enabled"
-              : isConnected
-              ? "Connected to Supabase"
-              : "Disconnected"}
-          </Text>
+      <View style={styles.customHeader}>
+        <TouchableOpacity style={styles.headerIconLeft}>
+          <Ionicons name="menu" size={26} color="#2563eb" />
+        </TouchableOpacity>
+        <Text style={styles.nudgeTitle}>nudge</Text>
+        <View style={styles.headerIconsRight}>
+          <TouchableOpacity>
+            <Ionicons name="calendar-outline" size={22} color="#2563eb" style={{ marginRight: 18 }} />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <Ionicons name="notifications-outline" size={22} color="#2563eb" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -298,12 +283,17 @@ export default function TasksScreen() {
             </Text>
           </View>
         ) : (
-          <TaskDeck
-            tasks={tasks}
-            onComplete={handleCompleteTask}
-            onPostpone={handlePostponeTask}
-            onFinish={handleFinishAllTasks}
-          />
+          <>
+            <TaskDeck
+              tasks={tasks}
+              onComplete={handleCompleteTask}
+              onPostpone={handlePostponeTask}
+              onFinish={handleFinishAllTasks}
+            />
+            <View style={styles.pillIndicator}>
+              <Text style={styles.pillIndicatorText}>{`1 of ${tasks.length} (tap to view all)`}</Text>
+            </View>
+          </>
         )}
       </View>
 
@@ -323,11 +313,11 @@ export default function TasksScreen() {
 
       {/* Add Task Button */}
       <TouchableOpacity
-        style={styles.addButton}
+        style={styles.nudgeFab}
         onPress={() => setIsModalVisible(true)}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
       >
-        <Ionicons name="add" size={28} color="#fff" />
+        <Ionicons name="add" size={36} color="#fff" style={{ fontWeight: 'bold' }} />
       </TouchableOpacity>
 
       {/* Task Creation Modal */}
@@ -341,6 +331,59 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 28,
+    paddingBottom: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 0,
+    position: 'relative',
+  },
+  headerIconLeft: {
+    position: 'absolute',
+    left: 24,
+    top: 32,
+    zIndex: 2,
+  },
+  headerIconsRight: {
+    position: 'absolute',
+    right: 24,
+    top: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  nudgeTitle: {
+    fontSize: 32,
+    color: '#2563eb',
+    fontWeight: 'bold',
+    fontStyle: 'italic',
+    letterSpacing: 1.5,
+    textAlign: 'center',
+    flex: 1,
+    marginLeft: 36,
+    marginRight: 36,
+  },
+  nudgeFab: {
+    position: 'absolute',
+    bottom: 38,
+    right: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.23,
+    shadowRadius: 8,
+    elevation: 7,
+    zIndex: 10,
+  },
+
   resetButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -358,7 +401,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: '#f7f7f7',
   },
   header: {
     paddingHorizontal: 20,
@@ -384,9 +427,33 @@ const styles = StyleSheet.create({
     paddingBottom: 90, // Offset for the footer and tab bar at bottom
   },
   footer: {
-    width: "100%",
-    alignItems: "center",
-    paddingBottom: 20,
+    width: '100%',
+    alignItems: 'center',
+    paddingBottom: 32,
+    backgroundColor: 'transparent',
+    elevation: 0,
+  },
+  pillIndicator: {
+    alignSelf: 'center',
+    marginTop: 16,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    marginBottom: 2,
+  },
+  pillIndicatorText: {
+    color: '#222',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  instructions: {
+    fontSize: 13,
+    color: '#bdbdbd',
+    textAlign: 'center',
+    marginTop: 0,
+    marginBottom: 10,
+    fontWeight: '400',
   },
   instructions: {
     fontSize: 14,
