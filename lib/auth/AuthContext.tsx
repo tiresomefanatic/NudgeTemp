@@ -95,8 +95,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       if (!error) {
-        // Navigate to the tabs (authenticated part of the app)
-        router.replace({ pathname: "/" }); // This will be handled by the root navigation to go to tabs
+        // Navigate directly to tasks page instead of root
+        router.replace({ pathname: "/(tabs)/tasks" }); // Redirect to tasks instead of root
       }
 
       return { error };
@@ -133,9 +133,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
-      // Navigate back to the login screen
-      router.replace({ pathname: "/" });
-      // The root navigation will handle redirecting to login when no session exists
+      // Navigate directly to tasks page instead of login
+      router.replace({ pathname: "/(tabs)/tasks" });
     } catch (error) {
       console.error("Sign out error:", error);
     }

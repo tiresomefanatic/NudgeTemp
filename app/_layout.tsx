@@ -38,6 +38,10 @@ function RootLayoutNav() {
     <PowerSyncProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
+          {/* Force directly to tasks screen, bypassing all conditional routing */}
+          <Stack.Screen name="(tabs)/tasks" options={{ headerShown: false }} />
+          
+          {/* Original authentication and routing completely bypassed
           {session ? (
             // Authenticated routes
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -45,6 +49,7 @@ function RootLayoutNav() {
             // Unauthenticated routes
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           )}
+          */}
           <Stack.Screen name="+not-found" options={{ title: "Not Found" }} />
         </Stack>
         <StatusBar style="auto" />
