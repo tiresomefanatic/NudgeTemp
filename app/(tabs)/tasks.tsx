@@ -268,7 +268,9 @@ export default function TasksScreen() {
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.nudgeTitle}>nudge</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.nudgeTitle}>nudge</Text>
+          </View>
           <View style={styles.headerIconsRight}>
             <TouchableOpacity>
               <Image source={require("@/assets/icons/calendar.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
@@ -352,15 +354,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 0,
     position: 'relative',
-    paddingHorizontal: 24,
+    paddingHorizontal: 0, 
   },
   headerIconLeft: {
-    marginRight: 12,
+    marginLeft: 16,
+    marginRight: 0,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerIconsRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 12,
+    marginRight: 16,
+    gap: 8,
+  },
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
   },
   nudgeTitle: {
     fontFamily: 'Sharpie',
@@ -372,6 +390,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#3800FF',
     flex: 1,
+    width: '100%',
   },
   nudgeFab: {
     position: 'absolute',
