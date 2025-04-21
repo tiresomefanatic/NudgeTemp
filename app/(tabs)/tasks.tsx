@@ -309,9 +309,6 @@ export default function TasksScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.instructions}>
-          Swipe right to complete a task, left to postpone it.
-        </Text>
 
         <TouchableOpacity
           style={styles.resetButton}
@@ -447,17 +444,17 @@ const styles = StyleSheet.create({
   },
   deckContainer: {
     flex: 1,
-    justifyContent: "center", // Center vertically
     alignItems: "center", // Center horizontally
     width: "100%",
     paddingHorizontal: 0,
-    paddingBottom: 90, // Offset for the footer and tab bar at bottom
+    paddingBottom: 40,
+    backgroundColor: '#FFFFFF',
   },
   footer: {
     width: '100%',
     alignItems: 'center',
     paddingBottom: 32,
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
     elevation: 0,
   },
   pillIndicator: {
