@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, View, Dimensions, ViewStyle } from "react-native";
+import { StyleSheet, Text, View, Dimensions, ViewStyle, ScrollView } from "react-native";
 import { Task } from "../../types/task";
 
 const { width } = Dimensions.get("window");
@@ -64,79 +64,82 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
 
   return (
     <View style={[styles.card, style]}>
-      {/* Cosmic illustration */}
-      <View style={styles.illustration}>
-        {renderStars()}
-        {/* Some planet-like circles */}
-        <View style={styles.planet1} />
-        <View style={styles.planet2} />
-        <View style={styles.planet3} />
-        {/* Some random scribbles to mimic the hand-drawn look */}
-        <View style={styles.scribble1} />
-        <View style={styles.scribble2} />
-        <View style={styles.scribble3} />
-      </View>
-
-      {/* Forest illustration */}
-      <View style={styles.forestIllustration}>
-        {renderTrees()}
-        {/* Add some lines to mimic the text-like scribbles */}
-        <View style={styles.textScribble1} />
-        <View style={styles.textScribble2} />
-        <View style={styles.textScribble3} />
-      </View>
-
-      {/* Title */}
-      <View style={styles.titleContainer}>
-        <Text style={styles.taskTitle}>
-          {task.title || "Plan a vacation to Jakarta and Bali"}
-        </Text>
-      </View>
-
-      {/* Avatar with initial */}
-      <View style={styles.avatarRow}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>A</Text>
+      <ScrollView
+      >
+        {/* Cosmic illustration */}
+        <View style={styles.illustration}>
+          {renderStars()}
+          {/* Some planet-like circles */}
+          <View style={styles.planet1} />
+          <View style={styles.planet2} />
+          <View style={styles.planet3} />
+          {/* Some random scribbles to mimic the hand-drawn look */}
+          <View style={styles.scribble1} />
+          <View style={styles.scribble2} />
+          <View style={styles.scribble3} />
         </View>
-        <Text style={styles.ownerName}>Alice</Text>
-      </View>
 
-      {/* Divider */}
-      <View style={styles.divider} />
-
-      {/* Details section */}
-      <Text style={styles.sectionHeader}>DETAILS</Text>
-      <Text style={styles.detailsText}>
-        {task.description ||
-          "Find hotels for 3 days in Jakarta and 5 days in Bali. Check out cheap ticket options to fly down"}
-      </Text>
-
-      {/* Collaborators section */}
-      <Text style={styles.sectionHeader}>COLLABORATORS</Text>
-      <View style={styles.collaboratorsRow}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>A</Text>
+        {/* Forest illustration */}
+        <View style={styles.forestIllustration}>
+          {renderTrees()}
+          {/* Add some lines to mimic the text-like scribbles */}
+          <View style={styles.textScribble1} />
+          <View style={styles.textScribble2} />
+          <View style={styles.textScribble3} />
         </View>
-        <View style={styles.greenAvatar}>
-          <Text style={styles.greenAvatarText}>$</Text>
-        </View>
-        <Text style={styles.collaboratorText}>
-          Alice, <Text style={styles.italicText}>you</Text>
-        </Text>
-      </View>
 
-      {/* Notes & Nudges section */}
-      <Text style={styles.sectionHeader}>NOTES & NUDGES</Text>
-      <View style={styles.nudgeContainer}>
-        <View style={styles.nudgePill}>
-          <Text style={styles.nudgeText}>
-            Remind me on Wednesday to do this
+        {/* Title */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.taskTitle}>
+            {task.title || "Plan a vacation to Jakarta and Bali"}
           </Text>
-          <View style={styles.smallGreenAvatar}>
+        </View>
+
+        {/* Avatar with initial */}
+        <View style={styles.avatarRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>A</Text>
+          </View>
+          <Text style={styles.ownerName}>Alice</Text>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Details section */}
+        <Text style={styles.sectionHeader}>DETAILS</Text>
+        <Text style={styles.detailsText}>
+          {task.description ||
+            "Find hotels for 3 days in Jakarta and 5 days in Bali. Check out cheap ticket options to fly down"}
+        </Text>
+
+        {/* Collaborators section */}
+        <Text style={styles.sectionHeader}>COLLABORATORS</Text>
+        <View style={styles.collaboratorsRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>A</Text>
+          </View>
+          <View style={styles.greenAvatar}>
             <Text style={styles.greenAvatarText}>$</Text>
           </View>
+          <Text style={styles.collaboratorText}>
+            Alice, <Text style={styles.italicText}>you</Text>
+          </Text>
         </View>
-      </View>
+
+        {/* Notes & Nudges section */}
+        <Text style={styles.sectionHeader}>NOTES & NUDGES</Text>
+        <View style={styles.nudgeContainer}>
+          <View style={styles.nudgePill}>
+            <Text style={styles.nudgeText}>
+              Remind me on Wednesday to do this
+            </Text>
+            <View style={styles.smallGreenAvatar}>
+              <Text style={styles.greenAvatarText}>$</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 };
@@ -154,6 +157,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
+    maxHeight: '100%',
   },
   illustration: {
     width: "100%",
