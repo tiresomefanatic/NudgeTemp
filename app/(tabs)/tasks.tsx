@@ -326,7 +326,8 @@ export default function TasksScreen() {
         onPress={() => setIsModalVisible(true)}
         activeOpacity={0.85}
       >
-        <Ionicons name="add" size={36} color="#fff" style={{ fontWeight: 'bold' }} />
+        
+          <Image source={require("@/assets/icons/plus.png")} style={{ width: 24, height: 24 }} resizeMode="contain" />
       </TouchableOpacity>
 
       {/* Task Creation Modal */}
@@ -362,28 +363,31 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   nudgeTitle: {
-    fontSize: 32,
-    color: '#2563eb',
-    fontWeight: 'bold',
+    fontFamily: 'Sharpie',
+    fontWeight: '500', //540 not supported
     fontStyle: 'italic',
-    letterSpacing: 1.5,
+    fontSize: 32,
+    lineHeight: 32,
+    letterSpacing: 0.15,
     textAlign: 'center',
+    color: '#3800FF',
     flex: 1,
   },
   nudgeFab: {
     position: 'absolute',
     bottom: 38,
     right: 28,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#2563eb',
+    width: 48,
+    height: 48,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#1249D3',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.23,
-    shadowRadius: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
     elevation: 7,
     zIndex: 10,
   },
