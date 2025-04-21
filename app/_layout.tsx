@@ -62,6 +62,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
+    Sharpie: require("../assets/fonts/Sharpie-Variable.ttf"),
   });
 
   useEffect(() => {

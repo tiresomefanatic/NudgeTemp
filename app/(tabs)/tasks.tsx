@@ -12,12 +12,14 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 
 import TaskDeck from "@/components/tasks/TaskDeck";
 import { Task } from "@/types/task";
@@ -256,20 +258,29 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
 
-      <View style={styles.customHeader}>
-        <TouchableOpacity style={styles.headerIconLeft}>
-          <Ionicons name="menu" size={26} color="#2563eb" />
-        </TouchableOpacity>
-        <Text style={styles.nudgeTitle}>nudge</Text>
-        <View style={styles.headerIconsRight}>
-          <TouchableOpacity>
-            <Ionicons name="calendar-outline" size={22} color="#2563eb" style={{ marginRight: 18 }} />
+      {/* Header inside SafeAreaView */}
+      <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
+        <View style={styles.customHeader}>
+          <TouchableOpacity style={styles.headerIconLeft}>
+            <Image
+              source={require("@/assets/icons/hamburger.png")}
+              style={{ width: 32, height: 32 }}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={22} color="#2563eb" />
-          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.nudgeTitle}>nudge</Text>
+          </View>
+          <View style={styles.headerIconsRight}>
+            <TouchableOpacity>
+              <Image source={require("@/assets/icons/calendar.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
+            </TouchableOpacity>
+            <TouchableOpacity>
+              <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </RNSafeAreaView>
 
       <View style={styles.deckContainer}>
         {loading ? (
@@ -317,7 +328,8 @@ export default function TasksScreen() {
         onPress={() => setIsModalVisible(true)}
         activeOpacity={0.85}
       >
-        <Ionicons name="add" size={36} color="#fff" style={{ fontWeight: 'bold' }} />
+        
+          <Image source={require("@/assets/icons/plus.png")} style={{ width: 24, height: 24 }} resizeMode="contain" />
       </TouchableOpacity>
 
       {/* Task Creation Modal */}
@@ -331,55 +343,70 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  safeHeader: {
+    backgroundColor: '#fff',
+  },
   customHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 28,
+    justifyContent: 'space-between',
     paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 0,
     position: 'relative',
+    paddingHorizontal: 0, 
   },
   headerIconLeft: {
-    position: 'absolute',
-    left: 24,
-    top: 32,
-    zIndex: 2,
+    marginLeft: 16,
+    marginRight: 0,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerIconsRight: {
-    position: 'absolute',
-    right: 24,
-    top: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 2,
+    marginRight: 16,
+    gap: 8,
+  },
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
   },
   nudgeTitle: {
-    fontSize: 32,
-    color: '#2563eb',
-    fontWeight: 'bold',
+    fontFamily: 'Sharpie',
+    fontWeight: '500', //540 not supported
     fontStyle: 'italic',
-    letterSpacing: 1.5,
+    fontSize: 32,
+    lineHeight: 32,
+    letterSpacing: 0.15,
     textAlign: 'center',
+    color: '#3800FF',
     flex: 1,
-    marginLeft: 36,
-    marginRight: 36,
+    width: '100%',
   },
   nudgeFab: {
     position: 'absolute',
     bottom: 38,
     right: 28,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#2563eb',
+    width: 48,
+    height: 48,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#1249D3',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.23,
-    shadowRadius: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
     elevation: 7,
     zIndex: 10,
   },
@@ -455,11 +482,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontWeight: '400',
   },
-  instructions: {
-    fontSize: 14,
-    color: "#999",
-    textAlign: "center",
-  },
+
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
