@@ -12,12 +12,14 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 
 import TaskDeck from "@/components/tasks/TaskDeck";
 import { Task } from "@/types/task";
@@ -256,20 +258,27 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
 
-      <View style={styles.customHeader}>
-        <TouchableOpacity style={styles.headerIconLeft}>
-          <Ionicons name="menu" size={26} color="#2563eb" />
-        </TouchableOpacity>
-        <Text style={styles.nudgeTitle}>nudge</Text>
-        <View style={styles.headerIconsRight}>
-          <TouchableOpacity>
-            <Ionicons name="calendar-outline" size={22} color="#2563eb" style={{ marginRight: 18 }} />
+      {/* Header inside SafeAreaView */}
+      <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
+        <View style={styles.customHeader}>
+          <TouchableOpacity style={styles.headerIconLeft}>
+            <Image
+              source={require("@/assets/icons/hamburger.png")}
+              style={{ width: 32, height: 32 }}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={22} color="#2563eb" />
-          </TouchableOpacity>
+          <Text style={styles.nudgeTitle}>nudge</Text>
+          <View style={styles.headerIconsRight}>
+            <TouchableOpacity>
+              <Image source={require("@/assets/icons/calendar.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
+            </TouchableOpacity>
+            <TouchableOpacity>
+              <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </RNSafeAreaView>
 
       <View style={styles.deckContainer}>
         {loading ? (
@@ -331,29 +340,26 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  safeHeader: {
+    backgroundColor: '#fff',
+  },
   customHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 28,
+    justifyContent: 'space-between',
     paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 0,
     position: 'relative',
+    paddingHorizontal: 24,
   },
   headerIconLeft: {
-    position: 'absolute',
-    left: 24,
-    top: 32,
-    zIndex: 2,
+    marginRight: 12,
   },
   headerIconsRight: {
-    position: 'absolute',
-    right: 24,
-    top: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 2,
+    marginLeft: 12,
   },
   nudgeTitle: {
     fontSize: 32,
@@ -363,8 +369,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textAlign: 'center',
     flex: 1,
-    marginLeft: 36,
-    marginRight: 36,
   },
   nudgeFab: {
     position: 'absolute',
@@ -455,11 +459,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontWeight: '400',
   },
-  instructions: {
-    fontSize: 14,
-    color: "#999",
-    textAlign: "center",
-  },
+
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
