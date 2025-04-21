@@ -63,6 +63,10 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
     Sharpie: require("../assets/fonts/Sharpie-Variable.ttf"),
+    Kalam: require("../assets/fonts/Kalam-Variable.ttf"),
+    Kihim: require("../assets/fonts/Kihim-Regular.otf"),
+    Pally: require("../assets/fonts/Pally-Variable.ttf"),
+    
   });
 
   useEffect(() => {
