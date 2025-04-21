@@ -34,6 +34,18 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Sharpie-Variable.ttf",
+            "./assets/fonts/SpaceMono-Regular.ttf",
+            "./assets/fonts/Kalam-Variable.ttf",
+            "./assets/fonts/Kihim-Regular.otf",
+            "./assets/fonts/Pally-Variable.ttf"
+          ]
+        }
       ]
     ],
     "experiments": {
