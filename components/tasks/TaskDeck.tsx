@@ -156,7 +156,6 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
             cardStyle={styles.cardStyle}
             cardHorizontalMargin={0}
             onSwiped={handleSwiped}
-            stackDirection="top" // Stack cards towards the top
             secondCardZoom={1}
             zoomFriction={7}
             swipeAnimationDuration={350}
@@ -274,11 +273,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           onPress={toggleViewMode}
           activeOpacity={0.7}
         >
-          <View style={styles.progressInner}>
+          {/* <View style={styles.progressInner}>
             <Text style={styles.progressText}>
               {cardIndex + 1} of {activeTasks.length} (tap to view all)
             </Text>
-          </View>
+          </View> */}
         </TouchableOpacity>
       )}
     </View>
