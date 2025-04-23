@@ -14,12 +14,17 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
+  PanResponder,
 } from "react-native";
-import Swiper from "react-native-deck-swiper";
 import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
 
 const { width, height } = Dimensions.get("window");
+
+// Constants for swipe thresholds
+const SWIPE_THRESHOLD = width * 0.25;
+const ROTATION_ANGLE = 8;
+const SPRING_CONFIG = { damping: 15, stiffness: 150 };
 
 interface TaskDeckProps {
   tasks: Task[];
@@ -34,8 +39,6 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   onPostpone,
   onFinish,
 }) => {
-  const swiperRef = useRef<Swiper<Task>>(null);
-
   // Active tasks in the current deck
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   // Tasks that have been postponed
@@ -46,13 +49,156 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const [isListMode, setIsListMode] = useState(false);
   // Animation value for list transitions
   const listAnimationValue = useRef(new Animated.Value(0)).current;
+  
+  // Animation values for the card
+  const position = useRef(new Animated.ValueXY()).current;
+  const rotateAnimValue = position.x.interpolate({
+    inputRange: [-width * 0.7, 0, width * 0.7],
+    outputRange: [`-${ROTATION_ANGLE}deg`, '0deg', `${ROTATION_ANGLE}deg`],
+    extrapolate: 'clamp',
+  });
+  
+  // Label opacity values
+  const leftLabelOpacity = position.x.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, -20],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  
+  const rightLabelOpacity = position.x.interpolate({
+    inputRange: [20, SWIPE_THRESHOLD],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   // Initialize the deck when we receive initialTasks
   useEffect(() => {
-    setActiveTasks([...initialTasks]);
-    setPostponedTasks([]);
-    setCardIndex(0);
+    if (initialTasks && initialTasks.length > 0) {
+      setActiveTasks([...initialTasks]);
+      setPostponedTasks([]);
+      setCardIndex(0);
+      // Reset animation values
+      position.setValue({ x: 0, y: 0 });
+    }
   }, [initialTasks]);
+
+  // Function to handle when a card is swiped left (postponed)
+  const handleSwipedLeft = useCallback((index: number) => {
+    // Get the task being postponed
+    const taskToPostpone = activeTasks[index];
+
+    // Call the parent's callback
+    onPostpone(taskToPostpone);
+
+    // Add task to postponed list (to be shown at the end of the active list)
+    setPostponedTasks((prev) => [...prev, taskToPostpone]);
+    
+    // Update the current index
+    setCardIndex(prevIndex => prevIndex + 1);
+    
+    // Reset immediately (without animation) for a clean state for the next card
+    position.setValue({ x: 0, y: 0 });
+  }, [activeTasks, onPostpone]);
+
+  // Function to handle when a card is swiped right (completed)
+  const handleSwipedRight = useCallback((index: number) => {
+    // Task complete
+    onComplete(activeTasks[index]);
+    
+    // Update the current index
+    setCardIndex(prevIndex => prevIndex + 1);
+    
+    // Reset immediately (without animation) for a clean state for the next card
+    position.setValue({ x: 0, y: 0 });
+  }, [activeTasks, onComplete]);
+
+  // Reset position after swipe
+  const resetPosition = () => {
+    Animated.spring(position, {
+      toValue: { x: 0, y: 0 },
+      friction: 5,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Create pan responder for swipe gestures
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: (evt, gestureState) => {
+      // Don't capture gestures for very small movements (likely scrolling)
+      return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
+    },
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      // Only capture horizontal movements for card swiping
+      // This allows vertical scrolling to work inside the card
+      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy * 2);
+    },
+    onPanResponderMove: (_, gesture) => {
+      position.setValue({ x: gesture.dx, y: gesture.dy });
+    },
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dx > SWIPE_THRESHOLD) {
+        // Swiped right - complete
+        Animated.timing(position, {
+          toValue: { x: width * 1.5, y: gesture.dy },
+          duration: 250,
+          useNativeDriver: true,
+        }).start(() => {
+          handleSwipedRight(cardIndex);
+        });
+      } else if (gesture.dx < -SWIPE_THRESHOLD) {
+        // Swiped left - postpone
+        Animated.timing(position, {
+          toValue: { x: -width * 1.5, y: gesture.dy },
+          duration: 250,
+          useNativeDriver: true,
+        }).start(() => {
+          handleSwipedLeft(cardIndex);
+        });
+      } else {
+        // Return to center
+        resetPosition();
+      }
+    },
+  }), [cardIndex, handleSwipedLeft, handleSwipedRight]);
+
+  // Check if all cards have been swiped
+  useEffect(() => {
+    // If we have no more active tasks but have postponed tasks
+    if (cardIndex >= activeTasks.length && postponedTasks.length > 0) {
+      setActiveTasks(postponedTasks);
+      setPostponedTasks([]);
+      setCardIndex(0);
+      position.setValue({ x: 0, y: 0 });
+    } 
+    // If no more cards at all
+    else if (cardIndex >= activeTasks.length && postponedTasks.length === 0 && onFinish) {
+      onFinish();
+    }
+  }, [cardIndex, activeTasks.length, postponedTasks, onFinish]);
+
+  // Animate card transitions
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionAnimation = useRef(new Animated.Value(0)).current;
+  
+  // When cardIndex changes, trigger the transition animation
+  useEffect(() => {
+    if (cardIndex > 0) {
+      setIsTransitioning(true);
+      
+      // Reset to prepare for animation
+      transitionAnimation.setValue(0);
+      
+      // Animate the transition
+      Animated.timing(transitionAnimation, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsTransitioning(false);
+      });
+    }
+  }, [cardIndex]);
 
   // Prepare combined tasks for display (active tasks first, then postponed)
   const allTasks = useMemo(() => {
@@ -72,51 +218,8 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     }).start();
   }, [isListMode, listAnimationValue]);
 
-  // Function to handle when a card is swiped left (postponed)
-  const handleSwipedLeft = (index: number) => {
-    // Get the task being postponed
-    const taskToPostpone = activeTasks[index];
-
-    // Call the parent's callback
-    onPostpone(taskToPostpone);
-
-    // Add task to postponed list (to be shown at the end of the active list)
-    setPostponedTasks((prev) => [...prev, taskToPostpone]);
-  };
-
-  // Function to handle when a card is swiped right (completed)
-  const handleSwipedRight = (index: number) => {
-    // Task complete
-    onComplete(activeTasks[index]);
-  };
-
-  // Handle any swipe (left or right)
-  const handleSwiped = (index: number) => {
-    // Just update the card index
-    setCardIndex(index + 1);
-  };
-
-  // Handle when all cards have been swiped
-  const handleAllSwiped = () => {
-    // If we have postponed tasks, move them to active
-    if (postponedTasks.length > 0) {
-      setActiveTasks(postponedTasks);
-      setPostponedTasks([]);
-      setCardIndex(0);
-
-      // Give the swiper a moment to reset
-      setTimeout(() => {
-        if (swiperRef.current) {
-          swiperRef.current.jumpToCardIndex(0);
-        }
-      }, 100);
-    } else if (onFinish) {
-      onFinish();
-    }
-  };
-
   // If there are no tasks, show an empty state
-  if (!activeTasks.length && !postponedTasks.length) {
+  if (activeTasks.length === 0 && postponedTasks.length === 0 && cardIndex === 0) {
     return (
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
@@ -126,93 +229,129 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     );
   }
 
+  // Render stack cards (show top 3 cards)
+  const renderStackCards = () => {
+    // Get up to 3 cards to show in the stack
+    const visibleCards = activeTasks.slice(cardIndex, cardIndex + 3);
+    
+    // Render cards from back to front (bottom to top)
+    // This way, the first card (current card) will be on top in z-index
+    return (
+      <View style={styles.cardsContainer}>
+        {/* Render cards in order from bottom to top */}
+        {visibleCards.map((task, idx) => {
+          const isTopCard = idx === 0;
+          
+          // Each card should be positioned higher than the previous
+          // First card at the bottom, subsequent cards stack upward
+          const cardYPosition = -18 * idx; // negative to move cards up
+          
+          // For the second card, apply a transition animation when it becomes the top card
+          const secondCardAnimation = isTransitioning && idx === 0 ? {
+            // Start from a position behind and scale slightly smaller
+            transform: [
+              { 
+                scale: transitionAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.97, 1],
+                })
+              },
+              {
+                translateY: transitionAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-18, cardYPosition],
+                })
+              }
+            ],
+            // Fade in to normal opacity
+            opacity: transitionAnimation.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.95, 1],
+            })
+          } : {};
+          
+          // Card styling
+          const cardStyle = {
+            ...styles.cardStyle,
+            // Top card has highest z-index
+            zIndex: 3 - idx,
+            // Decrease opacity for cards in the back
+            opacity: 1 - (idx * 0.05),
+            transform: [
+              // Decrease scale for cards in the back
+              { scale: 1 - (idx * 0.03) },
+              // Position cards vertically with the active card at the bottom
+              { translateY: cardYPosition }
+            ],
+            ...(isTopCard && isTransitioning ? secondCardAnimation : {}),
+          };
+
+          if (isTopCard) {
+            return (
+              <Animated.View 
+                key={`${task.id}-${cardIndex}`} 
+                style={[
+                  styles.cardStyle, 
+                  cardStyle, 
+                  {
+                    transform: [
+                      { translateX: position.x },
+                      { translateY: position.y.interpolate({
+                        inputRange: [-300, 0, 300],
+                        outputRange: [-20 + cardYPosition, cardYPosition, -20 + cardYPosition],
+                        extrapolate: 'clamp'
+                      }) },
+                      { rotate: rotateAnimValue }
+                    ]
+                  }
+                ]}
+                {...panResponder.panHandlers}
+              >
+                <TaskCard task={task} style={styles.centerCard} />
+                
+                {/* Overlay labels */}
+                <Animated.View style={[styles.leftLabelWrapper, { opacity: leftLabelOpacity }]}>
+                  <View style={styles.leftLabel}>
+                    <Text style={styles.leftLabelText}>POSTPONE</Text>
+                  </View>
+                </Animated.View>
+                
+                <Animated.View style={[styles.rightLabelWrapper, { opacity: rightLabelOpacity }]}>
+                  <View style={styles.rightLabel}>
+                    <Text style={styles.rightLabelText}>COMPLETE</Text>
+                  </View>
+                </Animated.View>
+              </Animated.View>
+            );
+          }
+
+          return (
+            <Animated.View 
+              key={`${task.id}-${cardIndex}-${idx}`} 
+              style={[
+                styles.cardStyle, 
+                cardStyle,
+                idx === 1 ? { // Special animation for the card that will become the top card next
+                  transform: [
+                    { scale: 1 - (idx * 0.03) },
+                    { translateY: cardYPosition }
+                  ]
+                } : null
+              ]}
+            >
+              <TaskCard task={task} style={styles.centerCard} />
+            </Animated.View>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {!isListMode ? (
         <View style={styles.deckTouchable}>
-          <Swiper
-            ref={swiperRef}
-            cards={activeTasks}
-            renderCard={(task) =>
-              task ? <TaskCard task={task} style={styles.centerCard} /> : null
-            }
-            onSwipedRight={handleSwipedRight}
-            onSwipedLeft={handleSwipedLeft}
-            onSwipedAll={handleAllSwiped}
-            cardIndex={cardIndex}
-            backgroundColor={"transparent"}
-            stackSize={3}
-            stackSeparation={-10} // Negative value to make cards overlap at the top
-            disableTopSwipe={true}
-            disableBottomSwipe={true}
-            stackScale={0.98}
-            infinite={false}
-            animateOverlayLabelsOpacity
-            animateCardOpacity
-            swipeBackCard
-            overlayOpacityHorizontalThreshold={20}
-            verticalSwipe={false}
-            containerStyle={styles.swiperContainer}
-            cardStyle={styles.cardStyle}
-            cardHorizontalMargin={0}
-            onSwiped={handleSwiped}
-            secondCardZoom={1}
-            zoomFriction={7}
-            swipeAnimationDuration={350}
-            outputRotationRange={["-6deg", "0deg", "6deg"]}
-            overlayLabels={{
-              left: {
-                title: "POSTPONE",
-                style: {
-                  label: {
-                    backgroundColor: "rgba(249, 217, 35, 0.9)",
-                    borderColor: "#F9D923",
-                    color: "black",
-                    borderWidth: 0,
-                    fontSize: 28,
-                    fontWeight: "bold",
-                    padding: 16,
-                    borderRadius: 8,
-                    textShadowColor: "rgba(0, 0, 0, 0.2)",
-                    textShadowOffset: { width: 1, height: 1 },
-                    textShadowRadius: 1,
-                  },
-                  wrapper: {
-                    flexDirection: "column",
-                    alignItems: "flex-start",
-                    justifyContent: "flex-start",
-                    marginTop: 30,
-                    marginLeft: 20,
-                  },
-                },
-              },
-              right: {
-                title: "COMPLETE",
-                style: {
-                  label: {
-                    backgroundColor: "rgba(57, 199, 165, 0.9)",
-                    borderColor: "#39C7A5",
-                    color: "white",
-                    borderWidth: 0,
-                    fontSize: 28,
-                    fontWeight: "bold",
-                    padding: 16,
-                    borderRadius: 8,
-                    textShadowColor: "rgba(0, 0, 0, 0.2)",
-                    textShadowOffset: { width: 1, height: 1 },
-                    textShadowRadius: 1,
-                  },
-                  wrapper: {
-                    flexDirection: "column",
-                    alignItems: "flex-end",
-                    justifyContent: "flex-start",
-                    marginTop: 30,
-                    marginRight: 20,
-                  },
-                },
-              },
-            }}
-          />
+          {renderStackCards()}
         </View>
       ) : (
         <View style={styles.listModeContainer}>
@@ -292,20 +431,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
   },
-  swiperContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
+  cardsContainer: {
+    flex: 1,
+    position: "relative",
+    width: "100%",
+
+    // Add more spacing at the top to give room for cards to stack upward
+    paddingTop: 40,
   },
   cardStyle: {
-    alignSelf: "center",
+    position: "absolute",
     width: "100%",
-    left: 0,
-    right: 0,
+    height: "auto",
+    alignSelf: "center",
   },
   centerCard: {
     alignSelf: "center",
@@ -317,6 +455,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  leftLabelWrapper: {
+    position: "absolute",
+    top: 30,
+    left: 20,
+    zIndex: 10,
+  },
+  rightLabelWrapper: {
+    position: "absolute",
+    top: 30,
+    right: 20,
+    zIndex: 10,
+  },
+  leftLabel: {
+    backgroundColor: "rgba(249, 217, 35, 0.9)",
+    borderColor: "#F9D923",
+    borderRadius: 8,
+    padding: 16,
+  },
+  rightLabel: {
+    backgroundColor: "rgba(57, 199, 165, 0.9)",
+    borderColor: "#39C7A5",
+    borderRadius: 8,
+    padding: 16,
+  },
+  leftLabelText: {
+    color: "black",
+    fontSize: 28,
+    fontWeight: "bold",
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 1,
+  },
+  rightLabelText: {
+    color: "white",
+    fontSize: 28,
+    fontWeight: "bold",
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 1,
   },
   progressContainer: {
     position: "absolute",

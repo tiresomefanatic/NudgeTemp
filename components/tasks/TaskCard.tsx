@@ -2,8 +2,9 @@ import React from "react";
 import { StyleSheet, Text, View, Dimensions, ViewStyle, ScrollView } from "react-native";
 import { Task } from "../../types/task";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85; // Adjusted to match screenshot
+const CARD_HEIGHT = height * 0.7; // Fixed height for card to enable scrolling
 
 interface TaskCardProps {
   task: Task;
@@ -64,8 +65,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
 
   return (
     <View style={[styles.card, style]}>
-      <ScrollView
-      >
+      <View style={styles.fixedHeader}>
         {/* Cosmic illustration */}
         <View style={styles.illustration}>
           {renderStars()}
@@ -87,7 +87,16 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
           <View style={styles.textScribble2} />
           <View style={styles.textScribble3} />
         </View>
+      </View>
 
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={true}
+        scrollEnabled={true}
+        alwaysBounceVertical={true}
+        directionalLockEnabled={true}
+      >
         {/* Title */}
         <View style={styles.titleContainer}>
           <Text style={styles.taskTitle}>
@@ -139,6 +148,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
             </View>
           </View>
         </View>
+        
+        {/* Add extra padding at bottom */}
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
@@ -147,6 +159,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     backgroundColor: "#fff",
     borderRadius: 20,
     borderWidth: 2,
@@ -157,7 +170,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
-    maxHeight: '100%',
+  },
+  fixedHeader: {
+    width: "100%",
+    position: "relative",
+    zIndex: 1,
+  },
+  scrollView: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollViewContent: {
+    paddingBottom: 20,
+  },
+  bottomPadding: {
+    height: 40,
   },
   illustration: {
     width: "100%",
