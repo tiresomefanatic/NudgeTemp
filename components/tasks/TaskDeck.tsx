@@ -15,9 +15,11 @@ import {
   TouchableOpacity,
   Animated,
   PanResponder,
+  ActivityIndicator,
 } from "react-native";
 import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
+import { powersync } from "@/lib/powersync/database";
 
 const { width, height } = Dimensions.get("window");
 
@@ -47,6 +49,9 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const [cardIndex, setCardIndex] = useState(0);
   // Track list vs deck view mode
   const [isListMode, setIsListMode] = useState(false);
+  // Track if there are postponed tasks in the system
+  const [hasPostponedTasks, setHasPostponedTasks] = useState(false);
+  const [checkingPostponedTasks, setCheckingPostponedTasks] = useState(true);
   // Animation value for list transitions
   const listAnimationValue = useRef(new Animated.Value(0)).current;
   
@@ -87,11 +92,8 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     // Get the task being postponed
     const taskToPostpone = activeTasks[index];
 
-    // Call the parent's callback
+    // Call the parent's callback to save it to the database
     onPostpone(taskToPostpone);
-
-    // Add task to postponed list (to be shown at the end of the active list)
-    setPostponedTasks((prev) => [...prev, taskToPostpone]);
     
     // Update the current index
     setCardIndex(prevIndex => prevIndex + 1);
@@ -162,20 +164,57 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     },
   }), [cardIndex, handleSwipedLeft, handleSwipedRight]);
 
+  // Check for postponed tasks in the system
+  useEffect(() => {
+    const checkPostponedTasks = async () => {
+      try {
+        // Query for any postponed tasks
+        const result = await powersync.execute(
+          "SELECT COUNT(*) as count FROM tasks WHERE is_postponed = 1"
+        );
+        
+        // Check if there are postponed tasks
+        const postponedCount = result.rows?._array?.[0]?.count || 0;
+        setHasPostponedTasks(postponedCount > 0);
+      } catch (error) {
+        console.error("Error checking for postponed tasks:", error);
+      } finally {
+        setCheckingPostponedTasks(false);
+      }
+    };
+    
+    checkPostponedTasks();
+  }, [cardIndex]); // Re-check when cardIndex changes as this indicates task state may have changed
+
   // Check if all cards have been swiped
   useEffect(() => {
-    // If we have no more active tasks but have postponed tasks
-    if (cardIndex >= activeTasks.length && postponedTasks.length > 0) {
-      setActiveTasks(postponedTasks);
-      setPostponedTasks([]);
-      setCardIndex(0);
-      position.setValue({ x: 0, y: 0 });
-    } 
-    // If no more cards at all
-    else if (cardIndex >= activeTasks.length && postponedTasks.length === 0 && onFinish) {
-      onFinish();
+    // If no more cards at all, but only call onFinish if it exists
+    // AND there are no postponed tasks in the system
+    if (cardIndex >= activeTasks.length && onFinish) {
+      // We should check for postponed tasks in the app before showing "All Done!"
+      // This prevents showing "All Done!" when there are postponed tasks
+      
+      // Check for any postponed tasks before showing "All Done!"
+      const checkPostponedTasks = async () => {
+        try {
+          // Query for any postponed tasks
+          const result = await powersync.execute(
+            "SELECT COUNT(*) as count FROM tasks WHERE is_postponed = 1"
+          );
+          
+          // Only call onFinish if there are no postponed tasks
+          const postponedCount = result.rows?._array?.[0]?.count || 0;
+          if (postponedCount === 0) {
+            onFinish();
+          }
+        } catch (error) {
+          console.error("Error checking for postponed tasks:", error);
+        }
+      };
+      
+      checkPostponedTasks();
     }
-  }, [cardIndex, activeTasks.length, postponedTasks, onFinish]);
+  }, [cardIndex, activeTasks.length, onFinish]);
 
   // Animate card transitions
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -220,10 +259,26 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   // If there are no tasks, show an empty state
   if (activeTasks.length === 0 && postponedTasks.length === 0 && cardIndex === 0) {
+    // Show loading state while checking
+    if (checkingPostponedTasks) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.emptyContainer}>
+            <ActivityIndicator size="small" color="#3800FF" />
+          </View>
+        </View>
+      );
+    }
+    
+    // Only show "All done" if there are no postponed tasks
     return (
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>All done for today! 🎉</Text>
+          {!hasPostponedTasks ? (
+            <Text style={styles.emptyText}>All done for today! 🎉</Text>
+          ) : (
+            <Text style={styles.emptyText}>No active tasks</Text>
+          )}
         </View>
       </View>
     );
