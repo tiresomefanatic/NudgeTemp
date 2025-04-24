@@ -211,11 +211,23 @@ export default function TasksScreen() {
   };
 
   const handleFinishAllTasks = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      "All Done!",
-      "You have completed all your tasks for today. Great job!"
-    );
+    // Check for postponed tasks before showing "All Done!"
+    const postponedCount = tasks.filter((task) => task.isPostponed).length;
+    
+    // Only show "All Done!" if there are no postponed tasks
+    if (postponedCount === 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "All Done!",
+        "You have completed all your tasks for today. Great job!"
+      );
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Tasks Complete",
+        "You've completed your active tasks. There are still some tasks in your Later Stack."
+      );
+    }
   };
 
   // Navigate to reset screen
