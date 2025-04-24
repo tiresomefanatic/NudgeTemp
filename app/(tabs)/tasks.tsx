@@ -194,6 +194,12 @@ export default function TasksScreen() {
     }
   };
 
+  // Navigate to later stack screen
+  const navigateToLaterStack = () => {
+    Haptics.selectionAsync();
+    router.push("/later-stack" as any);
+  };
+
   const handlePostponeTask = async (task: Task) => {
     try {
       await postponeTask(task.id);
@@ -261,7 +267,7 @@ export default function TasksScreen() {
       {/* Header inside SafeAreaView */}
       <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
         <View style={styles.customHeader}>
-          <TouchableOpacity style={styles.headerIconLeft}>
+          <TouchableOpacity style={styles.headerIconLeft} onPress={navigateToLaterStack}>
             <Image
               source={require("@/assets/icons/hamburger.png")}
               style={{ width: 32, height: 32 }}
