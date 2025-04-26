@@ -170,6 +170,25 @@ export const postponeTask = async (id: string): Promise<void> => {
   }
 };
 
+// Move a task back from Later Stack to main tasks
+export const unpostponeTask = async (id: string): Promise<void> => {
+  console.log("↩️ Moving task back to main tasks:", id);
+  try {
+    const sql = `UPDATE tasks 
+            SET is_postponed = 0,
+                postponed_at = NULL
+            WHERE id = ?`;
+    await powersync.execute(sql, [id]);
+    console.log("✅ Task moved back to main tasks successfully");
+  } catch (error: any) {
+    console.error(
+      "❌ Failed to move task back to main tasks:",
+      error?.message || "Unknown error"
+    );
+    throw error;
+  }
+};
+
 // Delete a task
 export const deleteTask = async (id: string): Promise<void> => {
   const sql = "DELETE FROM tasks WHERE id = ?";
@@ -195,7 +214,7 @@ export const useTasks = () => {
   const [loading, setLoading] = useState(true);
 
   const sql = `SELECT * FROM tasks 
-          WHERE (is_completed = 0) 
+          WHERE (is_completed = 0 AND is_postponed = 0) 
           ORDER BY 
             CASE priority 
               WHEN 'high' THEN 1 

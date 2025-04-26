@@ -194,6 +194,12 @@ export default function TasksScreen() {
     }
   };
 
+  // Navigate to later stack screen
+  const navigateToLaterStack = () => {
+    Haptics.selectionAsync();
+    router.push("/later-stack" as any);
+  };
+
   const handlePostponeTask = async (task: Task) => {
     try {
       await postponeTask(task.id);
@@ -205,11 +211,23 @@ export default function TasksScreen() {
   };
 
   const handleFinishAllTasks = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      "All Done!",
-      "You have completed all your tasks for today. Great job!"
-    );
+    // Check for postponed tasks before showing "All Done!"
+    const postponedCount = tasks.filter((task) => task.isPostponed).length;
+    
+    // Only show "All Done!" if there are no postponed tasks
+    if (postponedCount === 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "All Done!",
+        "You have completed all your tasks for today. Great job!"
+      );
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Tasks Complete",
+        "You've completed your active tasks. There are still some tasks in your Later Stack."
+      );
+    }
   };
 
   // Navigate to reset screen
@@ -261,7 +279,7 @@ export default function TasksScreen() {
       {/* Header inside SafeAreaView */}
       <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
         <View style={styles.customHeader}>
-          <TouchableOpacity style={styles.headerIconLeft}>
+          <TouchableOpacity style={styles.headerIconLeft} onPress={navigateToLaterStack}>
             <Image
               source={require("@/assets/icons/hamburger.png")}
               style={{ width: 32, height: 32 }}
