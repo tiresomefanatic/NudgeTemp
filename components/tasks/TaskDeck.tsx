@@ -16,12 +16,14 @@ import {
   Animated,
   PanResponder,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
 import { powersync } from "@/lib/powersync/database";
 
 const { width, height } = Dimensions.get("window");
+const CARD_WIDTH = width * 0.85;
 
 // Constants for swipe thresholds
 const SWIPE_THRESHOLD = width * 0.25;
@@ -63,14 +65,14 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     extrapolate: 'clamp',
   });
   
-  // Label opacity values
-  const leftLabelOpacity = position.x.interpolate({
+  // Overlay opacity values
+  const leftSwipeOverlayOpacity = position.x.interpolate({
     inputRange: [-SWIPE_THRESHOLD, -20],
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
   
-  const rightLabelOpacity = position.x.interpolate({
+  const rightSwipeOverlayOpacity = position.x.interpolate({
     inputRange: [20, SWIPE_THRESHOLD],
     outputRange: [0, 1],
     extrapolate: 'clamp',
@@ -362,18 +364,36 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                 ]}
                 {...panResponder.panHandlers}
               >
-                <TaskCard task={task} style={styles.centerCard} />
+                {/* Actual card component */}
+                <View style={styles.cardWrapper}>
+                  <TaskCard task={task} style={styles.centerCard} />
+                </View>
                 
-                {/* Overlay labels */}
-                <Animated.View style={[styles.leftLabelWrapper, { opacity: leftLabelOpacity }]}>
-                  <View style={styles.leftLabel}>
-                    <Text style={styles.leftLabelText}>POSTPONE</Text>
+                {/* Left Swipe (Postpone) Overlay */}
+                <Animated.View 
+                  style={[
+                    styles.overlayContainer, 
+                    styles.leftOverlay, 
+                    { opacity: leftSwipeOverlayOpacity }
+                  ]}
+                >
+                  <View style={styles.overlayContent}>
+                    <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, {transform: [{rotate: '12deg'}]}]} />
+                    <Text style={styles.latenText}>Later</Text>
                   </View>
                 </Animated.View>
                 
-                <Animated.View style={[styles.rightLabelWrapper, { opacity: rightLabelOpacity }]}>
-                  <View style={styles.rightLabel}>
-                    <Text style={styles.rightLabelText}>COMPLETE</Text>
+                {/* Right Swipe (Complete) Overlay */}
+                <Animated.View 
+                  style={[
+                    styles.overlayContainer, 
+                    styles.rightOverlay, 
+                    { opacity: rightSwipeOverlayOpacity }
+                  ]}
+                >
+                  <View style={styles.overlayContent}>
+                    <Image source={require('../../assets/icons/GreenCheck.png')} style={styles.overlayIcon} />
+                    <Text style={styles.doneText}>Done</Text>
                   </View>
                 </Animated.View>
               </Animated.View>
@@ -490,7 +510,6 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
     width: "100%",
-
     // Add more spacing at the top to give room for cards to stack upward
     paddingTop: 40,
   },
@@ -511,45 +530,50 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  leftLabelWrapper: {
+  // Overlay styles
+  overlayContainer: {
     position: "absolute",
-    top: 30,
-    left: 20,
-    zIndex: 10,
+
+    width: CARD_WIDTH,
+    height: "100%",
+    borderRadius: 20,
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
   },
-  rightLabelWrapper: {
-    position: "absolute",
-    top: 30,
-    right: 20,
-    zIndex: 10,
+  leftOverlay: {
+    backgroundColor: "#FFF6CC",
   },
-  leftLabel: {
-    backgroundColor: "rgba(249, 217, 35, 0.9)",
-    borderColor: "#F9D923",
-    borderRadius: 8,
-    padding: 16,
+  rightOverlay: {
+    backgroundColor: "#9CF697",
   },
-  rightLabel: {
-    backgroundColor: "rgba(57, 199, 165, 0.9)",
-    borderColor: "#39C7A5",
-    borderRadius: 8,
-    padding: 16,
+  overlayContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  leftLabelText: {
-    color: "black",
-    fontSize: 28,
-    fontWeight: "bold",
-    textShadowColor: "rgba(0, 0, 0, 0.2)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
+  overlayIcon: {
+    width: 80,
+    height: 80,
+    marginBottom: 10,
   },
-  rightLabelText: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "bold",
-    textShadowColor: "rgba(0, 0, 0, 0.2)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
+  doneText: {
+    color: "#17B20F",
+    textAlign: "center",
+    fontFamily: "Sharpie",
+    fontSize: 32,
+    fontWeight: "500",
+    lineHeight: 32,
+    letterSpacing: 0.15,
+  },
+  latenText: {
+    color: "#F9D923",
+    textAlign: "center",
+    fontFamily: "Sharpie",
+    fontSize: 32,
+    fontWeight: "500",
+    lineHeight: 32,
+    letterSpacing: 0.15,
   },
   progressContainer: {
     position: "absolute",
@@ -622,6 +646,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
     textAlign: "center",
+  },
+  cardWrapper: {
+    width: CARD_WIDTH,
+    height: "100%",
+    alignSelf: "center",
+    borderRadius: 20,
+    overflow: "hidden",
   },
 });
 
