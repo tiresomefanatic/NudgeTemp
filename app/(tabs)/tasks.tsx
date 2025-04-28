@@ -397,8 +397,7 @@ const styles = StyleSheet.create({
   },
   nudgeTitle: {
     fontFamily: 'Sharpie',
-    fontWeight: '500', //540 not supported
-    fontStyle: 'italic',
+    fontWeight: '400', //540 not supported
     fontSize: 32,
     lineHeight: 32,
     letterSpacing: 0.15,
