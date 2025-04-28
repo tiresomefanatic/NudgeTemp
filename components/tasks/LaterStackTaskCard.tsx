@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View, ViewStyle, Image, TouchableOpacity } from "react-native";
+import { router } from "expo-router";
 
 interface LaterStackTaskCardProps {
   title: string;
@@ -7,6 +8,7 @@ interface LaterStackTaskCardProps {
   date: string;
   participants: string[];
   style?: ViewStyle;
+  taskId?: string;
 }
 
 const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({ 
@@ -14,8 +16,16 @@ const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({
   userName, 
   date, 
   participants,
-  style 
+  style,
+  taskId = "task-id"
 }) => {
+  const navigateToNotes = () => {
+    router.push({
+      pathname: "/notes",
+      params: { taskId, taskTitle: title }
+    });
+  };
+
   return (
     <View style={[styles.card, style]}>
       {/* Left Avatar */}
@@ -72,7 +82,7 @@ const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({
       </View>
       
       {/* Chat icon */}
-      <TouchableOpacity style={styles.chatButton}>
+      <TouchableOpacity style={styles.chatButton} onPress={navigateToNotes}>
         <Image 
           source={require('@/assets/icons/Chat.png')} 
           style={styles.chatIcon} 

@@ -196,6 +196,7 @@ export default function LaterStackScreen() {
                       day: 'numeric',
                     })}
                     participants={['A', 'S']} // Mock participants for demo
+                    taskId={task.id} 
                   />
                 </Animated.View>
               );
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
     marginRight: 0,
     width: 32,
     height: 32,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
   headerTitleLeft: {
@@ -248,7 +249,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: 'Sharpie',
     fontWeight: '500',
-    fontStyle: 'italic',
     fontSize: 32,
     lineHeight: 32,
     letterSpacing: 0.15,
