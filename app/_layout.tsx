@@ -41,6 +41,9 @@ function RootLayoutNav() {
           {/* Force directly to tasks screen, bypassing all conditional routing */}
           <Stack.Screen name="(tabs)/tasks" options={{ headerShown: false }} />
           
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
+          <Stack.Screen name="later-stack" options={{ headerShown: false }} />
+          
           {/* Original authentication and routing completely bypassed
           {session ? (
             // Authenticated routes

@@ -147,11 +147,6 @@ export default function NotesScreen() {
           <View style={styles.headerTitleLeft}>
             <Text style={styles.headerTitle}>Notes</Text>
           </View>
-          <View style={styles.headerIconsRight}>
-            <TouchableOpacity>
-              <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
-            </TouchableOpacity>
-          </View>
         </View>
       </RNSafeAreaView>
 

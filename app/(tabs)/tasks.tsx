@@ -200,6 +200,11 @@ export default function TasksScreen() {
     router.push("/later-stack" as any);
   };
 
+  const navigateToNotifications = () => {
+    Haptics.selectionAsync();
+    router.push("/notifications" as any);
+  };
+
   const handlePostponeTask = async (task: Task) => {
     try {
       await postponeTask(task.id);
@@ -293,7 +298,7 @@ export default function TasksScreen() {
             <TouchableOpacity>
               <Image source={require("@/assets/icons/calendar.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
             </TouchableOpacity>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={navigateToNotifications}>
               <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
             </TouchableOpacity>
           </View>
