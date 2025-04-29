@@ -38,6 +38,11 @@ export default function LaterStackScreen() {
     router.back();
   };
   
+  const navigateToNotifications = () => {
+    Haptics.selectionAsync();
+    router.push("/notifications" as any);
+  };
+  
   const handleMoveToMainTasks = async (taskId: string) => {
     try {
       await unpostponeTask(taskId);
@@ -136,7 +141,7 @@ export default function LaterStackScreen() {
             <Text style={styles.headerTitle}>Later stack</Text>
           </View>
           <View style={styles.headerIconsRight}>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={navigateToNotifications}>
               <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
             </TouchableOpacity>
           </View>
