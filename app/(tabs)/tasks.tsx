@@ -28,6 +28,7 @@ import {
   createTask,
   completeTask,
   postponeTask,
+  nudgeTask,
   clearAllTasks,
 } from "@/lib/powersync/taskService";
 import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
@@ -273,6 +274,23 @@ export default function TasksScreen() {
     );
   };
 
+  const handleNudgeTask = async (task: Task) => {
+    try {
+      await nudgeTask(task.id);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      Alert.alert(
+        "Task Nudged",
+        `You've nudged "${task.title}". This will remind collaborators about this task.`,
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      console.error("Error nudging task:", error);
+      Alert.alert("Error", "Failed to nudge task");
+    }
+  };
+
   // Get counts of completed and postponed tasks for the stats display
   const completedCount = tasks.filter((task) => task.isCompleted).length;
   const postponedCount = tasks.filter((task) => task.isPostponed).length;
@@ -322,6 +340,7 @@ export default function TasksScreen() {
               tasks={tasks}
               onComplete={handleCompleteTask}
               onPostpone={handlePostponeTask}
+              onNudge={handleNudgeTask}
               onFinish={handleFinishAllTasks}
             />
             <View style={styles.pillIndicator}>
