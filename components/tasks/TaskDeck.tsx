@@ -17,6 +17,7 @@ import {
   PanResponder,
   ActivityIndicator,
   Image,
+  Easing,
 } from "react-native";
 import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
@@ -27,6 +28,7 @@ const CARD_WIDTH = width * 0.85;
 
 // Constants for swipe thresholds
 const SWIPE_THRESHOLD = width * 0.25;
+const SWIPE_UP_THRESHOLD = height * 0.15; // Threshold for upward swipe (nudge)
 const ROTATION_ANGLE = 8;
 const SPRING_CONFIG = { damping: 15, stiffness: 150 };
 
@@ -34,6 +36,7 @@ interface TaskDeckProps {
   tasks: Task[];
   onComplete: (task: Task) => void;
   onPostpone: (task: Task) => void;
+  onNudge?: (task: Task) => void; // New callback for nudge action
   onFinish?: () => void;
 }
 
@@ -41,6 +44,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   tasks: initialTasks,
   onComplete,
   onPostpone,
+  onNudge,
   onFinish,
 }) => {
   // Active tasks in the current deck
@@ -59,6 +63,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   
   // Animation values for the card
   const position = useRef(new Animated.ValueXY()).current;
+  const cardOpacity = useRef(new Animated.Value(1)).current;
   const rotateAnimValue = position.x.interpolate({
     inputRange: [-width * 0.7, 0, width * 0.7],
     outputRange: [`-${ROTATION_ANGLE}deg`, '0deg', `${ROTATION_ANGLE}deg`],
@@ -75,6 +80,18 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const rightSwipeOverlayOpacity = position.x.interpolate({
     inputRange: [20, SWIPE_THRESHOLD],
     outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  
+  const upSwipeOverlayOpacity = position.y.interpolate({
+    inputRange: [-SWIPE_UP_THRESHOLD * 1.5, -SWIPE_UP_THRESHOLD * 0.5],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const cardScale = position.y.interpolate({
+    inputRange: [-height * 0.7, -SWIPE_UP_THRESHOLD, 0],
+    outputRange: [0.85, 0.95, 1],
     extrapolate: 'clamp',
   });
 
@@ -116,6 +133,22 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     position.setValue({ x: 0, y: 0 });
   }, [activeTasks, onComplete]);
 
+  // Function to handle when a card is swiped upward (nudged)
+  const handleSwipedUp = useCallback((index: number) => {
+    if (!onNudge) return;
+    
+    const taskToNudge = activeTasks[index];
+    
+    onNudge(taskToNudge);
+    
+    Animated.spring(position, {
+      toValue: { x: 0, y: 0 },
+      friction: 5,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  }, [activeTasks, onNudge]);
+
   // Reset position after swipe
   const resetPosition = () => {
     Animated.spring(position, {
@@ -133,12 +166,29 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
     },
     onMoveShouldSetPanResponder: (evt, gestureState) => {
-      // Only capture horizontal movements for card swiping
-      // This allows vertical scrolling to work inside the card
-      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy * 2);
+      // Capture horizontal movements for card swiping
+      // For upward swipes, make sure we're primarily moving up (negative dy)
+      // and the movement is significant
+      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy * 1.5) ||
+             (gestureState.dy < -5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx));
     },
     onPanResponderMove: (_, gesture) => {
-      position.setValue({ x: gesture.dx, y: gesture.dy });
+      // Apply movement constraints to y-axis for better upward swipe behavior
+      // This makes the upward swipe feel more responsive and natural
+      let y = gesture.dy;
+      
+      // Make upward movement (negative dy) more pronounced, but dampen it slightly
+      // for more natural feel as card goes higher
+      if (gesture.dy < 0) {
+        // Apply progressive resistance as the card moves further up
+        const dampenFactor = Math.min(1, Math.abs(gesture.dy) / (height * 0.6));
+        y = gesture.dy * (1 - (dampenFactor * 0.3));
+      } else {
+        // Restrict downward movement more
+        y = gesture.dy * 0.4;
+      }
+      
+      position.setValue({ x: gesture.dx, y });
     },
     onPanResponderRelease: (_, gesture) => {
       if (gesture.dx > SWIPE_THRESHOLD) {
@@ -159,12 +209,45 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         }).start(() => {
           handleSwipedLeft(cardIndex);
         });
+      } else if (gesture.dy < -SWIPE_UP_THRESHOLD && onNudge) {
+        // Swiped up - nudge
+        // Create a sequence of animations for a more polished effect
+        Animated.parallel([
+          // Move card upward
+          Animated.sequence([
+            // First move up with acceleration
+            Animated.timing(position, {
+              toValue: { x: gesture.dx, y: -height * 0.6 },
+              duration: 250,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            // Then move further up
+            Animated.timing(position, {
+              toValue: { x: gesture.dx, y: -height },
+              duration: 150,
+              easing: Easing.in(Easing.quad),
+              useNativeDriver: true,
+            })
+          ]),
+          // Fade out the card as it moves up
+          Animated.timing(cardOpacity, {
+            toValue: 0,
+            duration: 400, // Total duration of the fade-out effect
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          // Then handle the nudge action and reset position
+          handleSwipedUp(cardIndex);
+          // Reset opacity for next time
+          cardOpacity.setValue(1);
+        });
       } else {
         // Return to center
         resetPosition();
       }
     },
-  }), [cardIndex, handleSwipedLeft, handleSwipedRight]);
+  }), [cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedUp, onNudge]);
 
   // Check for postponed tasks in the system
   useEffect(() => {
@@ -353,11 +436,8 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                   {
                     transform: [
                       { translateX: position.x },
-                      { translateY: position.y.interpolate({
-                        inputRange: [-300, 0, 300],
-                        outputRange: [-20 + cardYPosition, cardYPosition, -20 + cardYPosition],
-                        extrapolate: 'clamp'
-                      }) },
+                      { translateY: position.y },
+                      { scale: cardScale },
                       { rotate: rotateAnimValue }
                     ]
                   }
@@ -396,6 +476,20 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                     <Text style={styles.doneText}>Done</Text>
                   </View>
                 </Animated.View>
+                
+                {/* Upward Swipe (Nudge) Overlay */}
+                <Animated.View 
+                  style={[
+                    styles.overlayContainer, 
+                    styles.upOverlay, 
+                    { opacity: upSwipeOverlayOpacity }
+                  ]}
+                >
+                  <View style={styles.overlayContent}>
+                    <Image source={require('../../assets/icons/NudgeIcon.png')} style={styles.overlayIcon} />
+                    <Text style={styles.nudgeText}>Nudge</Text>
+                  </View>
+                </Animated.View>
               </Animated.View>
             );
           }
@@ -421,6 +515,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       </View>
     );
   };
+
+  // Add opacity interpolation
+  const opacity = position.y.interpolate({
+    inputRange: [-height, 0],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   return (
     <View style={styles.container}>
@@ -653,6 +754,18 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     borderRadius: 20,
     overflow: "hidden",
+  },
+  upOverlay: {
+    backgroundColor: "#1249D333",
+  },
+  nudgeText: {
+    color: "#1249D3",
+    textAlign: "center",
+    fontFamily: "Sharpie",
+    fontSize: 36,
+    fontWeight: "600",
+    lineHeight: 36,
+    letterSpacing: 0.15,
   },
 });
 
