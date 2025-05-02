@@ -4,7 +4,7 @@ import { Task } from "../../types/task";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85; // Adjusted to match screenshot
-const CARD_HEIGHT = height * 0.7; // Fixed height for card to enable scrolling
+const CARD_HEIGHT = height * 0.8; // Increased height for more screen usage
 
 interface TaskCardProps {
   task: Task;
