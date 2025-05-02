@@ -33,147 +33,7 @@ import {
 } from "@/lib/powersync/taskService";
 import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
 import { usePowerSyncApp } from "@/lib/powersync/provider";
-
-// Much simpler task creation modal
-const TaskCreationModal = ({
-  visible,
-  onClose,
-  onSave,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSave: () => void;
-}) => {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Reset form when modal closes
-  useEffect(() => {
-    if (!visible) {
-      setTitle("");
-      setDescription("");
-      setPriority("medium");
-    }
-  }, [visible]);
-
-  const handleSubmit = async () => {
-    if (!title.trim()) {
-      Alert.alert("Error", "Task title is required");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await createTask({
-        title,
-        description,
-        priority,
-        createdAt: new Date().toISOString(),
-        isCompleted: false,
-        isPostponed: false,
-        postponedCount: 0,
-      });
-
-      // Success feedback and cleanup
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onClose();
-    } catch (error) {
-      console.error("Error creating task:", error);
-      Alert.alert("Error", "Failed to create task. Please try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (!visible) return null;
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.simplifiedModal}>
-          {/* Modal Header */}
-          <View style={styles.simpleModalHeader}>
-            <Text style={styles.simpleModalTitle}>Create a New Task</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#000" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Form Fields */}
-          <View style={styles.simpleFormContainer}>
-            {/* Title Field */}
-            <Text style={styles.simpleInputLabel}>Title</Text>
-            <TextInput
-              style={styles.simpleInput}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="What needs to be done?"
-              placeholderTextColor="#999"
-            />
-
-            {/* Description Field */}
-            <Text style={styles.simpleInputLabel}>Description (optional)</Text>
-            <TextInput
-              style={[
-                styles.simpleInput,
-                { height: 100, textAlignVertical: "top" },
-              ]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Add details about this task"
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={4}
-            />
-
-            {/* Priority Selection */}
-            <Text style={styles.simpleInputLabel}>Priority</Text>
-            <View style={styles.simplePriorityButtons}>
-              {["high", "medium", "low"].map((p) => (
-                <TouchableOpacity
-                  key={p}
-                  style={[
-                    styles.simplePriorityButton,
-                    priority === p && styles.simplePriorityButtonSelected,
-                    p === "high" && { backgroundColor: "#ffedee" },
-                    p === "medium" && { backgroundColor: "#fff5e6" },
-                    p === "low" && { backgroundColor: "#e6f7ff" },
-                  ]}
-                  onPress={() => setPriority(p as "high" | "medium" | "low")}
-                >
-                  <Text style={priority === p ? { fontWeight: "bold" } : {}}>
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Action Button */}
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={handleSubmit}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.createButtonText}>Create Task</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-};
+import AddTaskCard from "@/components/tasks/AddTaskCard";
 
 export default function TasksScreen() {
   // Use PowerSync hooks to get tasks
@@ -182,8 +42,13 @@ export default function TasksScreen() {
   const headerHeight = useHeaderHeight();
   const [isClearing, setIsClearing] = useState(false);
 
-  // Task creation modal state
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  // Remove modal state, add inline card state
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // AddTaskCard state lifted up
+  const [addTitle, setAddTitle] = useState("");
+  const [addDetails, setAddDetails] = useState("");
 
   const handleCompleteTask = async (task: Task) => {
     try {
@@ -295,6 +160,55 @@ export default function TasksScreen() {
   const completedCount = tasks.filter((task) => task.isCompleted).length;
   const postponedCount = tasks.filter((task) => task.isPostponed).length;
 
+  // New handler for AddTaskCard
+  const handleCreateTask = async () => {
+    if (!addTitle.trim()) return;
+    setIsSaving(true);
+    try {
+      await createTask({
+        title: addTitle,
+        description: addDetails,
+        priority: "medium",
+        createdAt: new Date().toISOString(),
+        isCompleted: false,
+        isPostponed: false,
+        postponedCount: 0,
+      });
+      setShowAddCard(false);
+      setAddTitle("");
+      setAddDetails("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Error", "Failed to create task. Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    setShowAddCard(false);
+    setAddTitle("");
+    setAddDetails("");
+  };
+
+  // Compose tasks for deck
+  const deckTasks = showAddCard
+    ? [
+        {
+          id: "add",
+          title: addTitle,
+          description: addDetails,
+          priority: "medium" as const,
+          isCompleted: false,
+          isPostponed: false,
+          postponedCount: 0,
+          createdAt: new Date().toISOString(),
+        },
+        ...tasks,
+      ]
+    : tasks;
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
@@ -326,7 +240,7 @@ export default function TasksScreen() {
       <View style={styles.deckContainer}>
         {loading ? (
           <ActivityIndicator size="large" color="#0066ff" />
-        ) : tasks.length === 0 ? (
+        ) : deckTasks.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="checkbox-outline" size={64} color="#ccc" />
             <Text style={styles.emptyStateText}>No tasks yet</Text>
@@ -335,23 +249,95 @@ export default function TasksScreen() {
             </Text>
           </View>
         ) : (
-          <>
-            <TaskDeck
-              tasks={tasks}
-              onComplete={handleCompleteTask}
-              onPostpone={handlePostponeTask}
-              onNudge={handleNudgeTask}
-              onFinish={handleFinishAllTasks}
-            />
-            <View style={styles.pillIndicator}>
-              <Text style={styles.pillIndicatorText}>{`1 of ${tasks.length} (tap to view all)`}</Text>
-            </View>
-          </>
+          <TaskDeck
+            tasks={deckTasks}
+            onComplete={handleCompleteTask}
+            onPostpone={handlePostponeTask}
+            onNudge={handleNudgeTask}
+            onFinish={handleFinishAllTasks}
+            addTaskCardProps={showAddCard ? {
+              title: addTitle,
+              setTitle: setAddTitle,
+              details: addDetails,
+              setDetails: setAddDetails,
+            } : undefined}
+          />
         )}
       </View>
 
-      <View style={styles.footer}>
+      {/* Add Task Buttons absolutely at the bottom of the screen */}
+      {showAddCard && (
+        <View style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 30, 
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          marginHorizontal: 24,
+          zIndex: 20,
+          gap: 8,
+        }}>
+          <TouchableOpacity
+            style={{
+              display: 'flex',
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 8,
+              flex: 1,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: '#7267FF',
+              backgroundColor: '#fff',
+              marginRight: 0,
+            }}
+            onPress={handleDiscard}
+          >
+            <Text style={{
+              color: '#7267FF',
+              fontFamily: 'Pally',
+              fontSize: 16,
+              fontWeight: '400',
+              lineHeight: 20,
+              letterSpacing: 0,
+            }}>Discard</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              display: 'flex',
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 8,
+              flex: 1,
+              borderRadius: 12,
+              backgroundColor: '#3800FF',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.25,
+              shadowRadius: 12,
+              elevation: 4,
+              marginLeft: 0,
+            }}
+            onPress={handleCreateTask}
+            disabled={!addTitle.trim() || isSaving}
+          >
+            <Text style={{
+              color: '#fff',
+              fontFamily: 'Pally',
+              fontSize: 16,
+              fontWeight: '400',
+              lineHeight: 20,
+              letterSpacing: 0,
+            }}>Create task</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
+      {/* <View style={styles.footer}>
         <TouchableOpacity
           style={styles.resetButton}
           onPress={navigateToResetScreen}
@@ -359,24 +345,19 @@ export default function TasksScreen() {
           <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
           <Text style={styles.resetButtonText}>Reset Database</Text>
         </TouchableOpacity>
-      </View>
+      </View> 
+      Not needed for now */} 
 
       {/* Add Task Button */}
-      <TouchableOpacity
-        style={styles.nudgeFab}
-        onPress={() => setIsModalVisible(true)}
-        activeOpacity={0.85}
-      >
-        
+      {!showAddCard && (
+        <TouchableOpacity
+          style={styles.nudgeFab}
+          onPress={() => setShowAddCard(true)}
+          activeOpacity={0.85}
+        >
           <Image source={require("@/assets/icons/plus.png")} style={{ width: 24, height: 24 }} resizeMode="contain" />
-      </TouchableOpacity>
-
-      {/* Task Creation Modal */}
-      <TaskCreationModal
-        visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
-        onSave={() => setIsModalVisible(false)}
-      />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
