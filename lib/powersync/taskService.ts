@@ -385,7 +385,7 @@ export const usePostponedTasks = () => {
   const [loading, setLoading] = useState(true);
 
   const sql = `SELECT * FROM tasks 
-        WHERE is_postponed = 1 AND is_completed = 0
+        WHERE is_postponed = 1
         ORDER BY postponed_at DESC`;
 
   useEffect(() => {
