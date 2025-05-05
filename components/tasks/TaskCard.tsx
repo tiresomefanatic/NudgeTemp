@@ -99,56 +99,45 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
       >
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.taskTitle}>
+          <Text style={styles.updatedTaskTitle}>
             {task.title || "Plan a vacation to Jakarta and Bali"}
           </Text>
         </View>
 
-        {/* Avatar with initial */}
-        <View style={styles.avatarRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>A</Text>
+        {/* Owner pill */}
+        <View style={styles.ownerPillRow}>
+          <View style={styles.ownerPill}>
+            <Text style={styles.ownerPillText}>Alice</Text>
           </View>
-          <Text style={styles.ownerName}>Alice</Text>
         </View>
 
-        {/* Divider */}
-        <View style={styles.divider} />
+        {/* 24px gap */}
+        <View style={{ height: 24 }} />
 
         {/* Details section */}
-        <Text style={styles.sectionHeader}>DETAILS</Text>
-        <Text style={styles.detailsText}>
+        <Text style={styles.detailsSectionHeader}>DETAILS</Text>
+        <View style={{ height: 4 }} />
+        <Text style={styles.updatedDetailsText}>
           {task.description ||
             "Find hotels for 3 days in Jakarta and 5 days in Bali. Check out cheap ticket options to fly down"}
         </Text>
 
         {/* Collaborators section */}
-        <Text style={styles.sectionHeader}>COLLABORATORS</Text>
+        <Text style={styles.collaboratorsSectionHeader}>COLLABORATORS</Text>
         <View style={styles.collaboratorsRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>A</Text>
+          <View style={styles.avatarStack}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>A</Text>
+            </View>
+            <View style={styles.greenAvatarStacked}>
+              <Text style={styles.greenAvatarText}>$</Text>
+            </View>
           </View>
-          <View style={styles.greenAvatar}>
-            <Text style={styles.greenAvatarText}>$</Text>
-          </View>
-          <Text style={styles.collaboratorText}>
+          <Text style={styles.collaboratorNamesText}>
             Alice, <Text style={styles.italicText}>you</Text>
           </Text>
         </View>
 
-        {/* Notes & Nudges section */}
-        <Text style={styles.sectionHeader}>NOTES & NUDGES</Text>
-        <View style={styles.nudgeContainer}>
-          <View style={styles.nudgePill}>
-            <Text style={styles.nudgeText}>
-              Remind me on Wednesday to do this
-            </Text>
-            <View style={styles.smallGreenAvatar}>
-              <Text style={styles.greenAvatarText}>$</Text>
-            </View>
-          </View>
-        </View>
-        
         {/* Add extra padding at bottom */}
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -288,10 +277,13 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 4,
   },
-  taskTitle: {
-    fontSize: 26,
-    color: "#3b82f6",
-    fontWeight: "bold",
+  updatedTaskTitle: {
+    color: '#5A52FF',
+    fontSize: 24,
+    fontStyle: 'normal',
+    fontWeight: '700',
+    lineHeight: 32,
+    letterSpacing: -0.25,
   },
   avatarRow: {
     flexDirection: "row",
@@ -306,7 +298,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#3b82f6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
   },
   avatarText: {
     color: "#fff",
@@ -352,9 +343,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: -8,
-    borderWidth: 2,
-    borderColor: "#fff",
   },
   greenAvatarText: {
     color: "#fff",
@@ -394,6 +382,96 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
     alignItems: "center",
     justifyContent: "center",
+  },
+  ownerPillRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 4,
+    paddingBottom: 8,
+    paddingLeft: 16,
+    paddingRight: 16,
+    gap: 10,
+  },
+  ownerPill: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1A0075',
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ownerPillText: {
+    color: '#393B42',
+    fontSize: 14,
+    fontStyle: 'normal',
+    fontWeight: '700',
+    lineHeight: 16,
+    letterSpacing: 0,
+  },
+  detailsSectionHeader: {
+    color: '#868B97',
+    fontSize: 12,
+    fontStyle: 'normal',
+    fontWeight: '600',
+    lineHeight: 16,
+    letterSpacing: 0.15,
+    marginHorizontal: 20,
+    marginBottom: 0,
+    marginTop: 0,
+  },
+  updatedDetailsText: {
+    color: '#393B42',
+    fontSize: 14,
+    fontStyle: 'normal',
+    fontWeight: '300',
+    lineHeight: 20,
+    letterSpacing: 0,
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  collaboratorsSectionHeader: {
+    color: '#868B97',
+    fontSize: 12,
+    fontStyle: 'normal',
+    fontWeight: '600',
+    lineHeight: 16,
+    letterSpacing: 0.15,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  collaboratorNamesText: {
+    color: '#B2B5BD',
+    fontFamily: 'Be Vietnam',
+    fontSize: 14,
+    fontStyle: 'normal',
+    fontWeight: '700',
+    lineHeight: 16,
+    letterSpacing: 0,
+    marginLeft: 10,
+  },
+  avatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+    width: 44, // enough to show overlap
+    height: 36,
+    marginRight: 4,
+  },
+  greenAvatarStacked: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    left: 20, // overlap amount
+    zIndex: 1,
   },
 });
 
