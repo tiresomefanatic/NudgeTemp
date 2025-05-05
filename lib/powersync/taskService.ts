@@ -154,6 +154,7 @@ export const postponeTask = async (id: string): Promise<void> => {
   console.log("⏳ Postponing task:", id);
   try {
     const now = new Date().toISOString();
+    // Modified to only mark as postponed without removing from main queue
     const sql = `UPDATE tasks 
             SET is_postponed = 1, 
                 postponed_at = ?, 
@@ -213,9 +214,11 @@ export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Modified to include postponed tasks but order them after active tasks
   const sql = `SELECT * FROM tasks 
-          WHERE (is_completed = 0 AND is_postponed = 0) 
+          WHERE (is_completed = 0) 
           ORDER BY 
+            is_postponed ASC,
             CASE priority 
               WHEN 'high' THEN 1 
               WHEN 'medium' THEN 2 
@@ -385,7 +388,7 @@ export const usePostponedTasks = () => {
   const [loading, setLoading] = useState(true);
 
   const sql = `SELECT * FROM tasks 
-        WHERE is_postponed = 1 AND is_completed = 0
+        WHERE is_postponed = 1
         ORDER BY postponed_at DESC`;
 
   useEffect(() => {

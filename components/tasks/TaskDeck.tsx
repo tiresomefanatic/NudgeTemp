@@ -22,6 +22,7 @@ import {
 import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
 import { powersync } from "@/lib/powersync/database";
+import AddTaskCard from "./AddTaskCard";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85;
@@ -38,6 +39,7 @@ interface TaskDeckProps {
   onPostpone: (task: Task) => void;
   onNudge?: (task: Task) => void; // New callback for nudge action
   onFinish?: () => void;
+  addTaskCardProps?: any; // Props for AddTaskCard, if present
 }
 
 const TaskDeck: React.FC<TaskDeckProps> = ({
@@ -46,6 +48,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   onPostpone,
   onNudge,
   onFinish,
+  addTaskCardProps,
 }) => {
   // Active tasks in the current deck
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
@@ -73,13 +76,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   // Overlay opacity values
   const leftSwipeOverlayOpacity = position.x.interpolate({
     inputRange: [-SWIPE_THRESHOLD, -20],
-    outputRange: [1, 0],
+    outputRange: [0.5, 0],
     extrapolate: 'clamp',
   });
   
   const rightSwipeOverlayOpacity = position.x.interpolate({
     inputRange: [20, SWIPE_THRESHOLD],
-    outputRange: [0, 1],
+    outputRange: [0, 0.5],
     extrapolate: 'clamp',
   });
   
@@ -111,14 +114,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     // Get the task being postponed
     const taskToPostpone = activeTasks[index];
 
-    // Call the parent's callback to save it to the database
+    // Call the parent's callback to mark the task as postponed
     onPostpone(taskToPostpone);
     
-    // Update the current index
+    // Update the current index to show the next task
     setCardIndex(prevIndex => prevIndex + 1);
     
     // Reset immediately (without animation) for a clean state for the next card
     position.setValue({ x: 0, y: 0 });
+    
+    // Note: We don't need to manually move the task here as the useTasks hook
+    // will now return all tasks with postponed ones at the end of the queue
   }, [activeTasks, onPostpone]);
 
   // Function to handle when a card is swiped right (completed)
@@ -380,11 +386,12 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       <View style={styles.cardsContainer}>
         {/* Render cards in order from bottom to top */}
         {visibleCards.map((task, idx) => {
+          // If the top card is AddTaskCard, give it a slightly larger offset
+          let cardYPosition = -18 * idx;
+          if (idx === 0 && task.id === "add") {
+            cardYPosition = -28; // lift AddTaskCard a bit more for even spacing
+          }
           const isTopCard = idx === 0;
-          
-          // Each card should be positioned higher than the previous
-          // First card at the bottom, subsequent cards stack upward
-          const cardYPosition = -18 * idx; // negative to move cards up
           
           // For the second card, apply a transition animation when it becomes the top card
           const secondCardAnimation = isTransitioning && idx === 0 ? {
@@ -442,54 +449,59 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                     ]
                   }
                 ]}
-                {...panResponder.panHandlers}
+                {...(task.id !== "add" ? panResponder.panHandlers : {})}
               >
-                {/* Actual card component */}
                 <View style={styles.cardWrapper}>
-                  <TaskCard task={task} style={styles.centerCard} />
+                  {task.id === "add" ? (
+                    <AddTaskCard {...addTaskCardProps} />
+                  ) : (
+                    <TaskCard task={task} style={styles.centerCard} />
+                  )}
                 </View>
-                
-                {/* Left Swipe (Postpone) Overlay */}
-                <Animated.View 
-                  style={[
-                    styles.overlayContainer, 
-                    styles.leftOverlay, 
-                    { opacity: leftSwipeOverlayOpacity }
-                  ]}
-                >
-                  <View style={styles.overlayContent}>
-                    <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, {transform: [{rotate: '12deg'}]}]} />
-                    <Text style={styles.latenText}>Later</Text>
-                  </View>
-                </Animated.View>
-                
-                {/* Right Swipe (Complete) Overlay */}
-                <Animated.View 
-                  style={[
-                    styles.overlayContainer, 
-                    styles.rightOverlay, 
-                    { opacity: rightSwipeOverlayOpacity }
-                  ]}
-                >
-                  <View style={styles.overlayContent}>
-                    <Image source={require('../../assets/icons/GreenCheck.png')} style={styles.overlayIcon} />
-                    <Text style={styles.doneText}>Done</Text>
-                  </View>
-                </Animated.View>
-                
-                {/* Upward Swipe (Nudge) Overlay */}
-                <Animated.View 
-                  style={[
-                    styles.overlayContainer, 
-                    styles.upOverlay, 
-                    { opacity: upSwipeOverlayOpacity }
-                  ]}
-                >
-                  <View style={styles.overlayContent}>
-                    <Image source={require('../../assets/icons/NudgeIcon.png')} style={styles.overlayIcon} />
-                    <Text style={styles.nudgeText}>Nudge</Text>
-                  </View>
-                </Animated.View>
+                {/* Overlays only for swipable cards */}
+                {task.id !== "add" && (
+                  <>
+                    {/* Left Swipe (Postpone) Overlay */}
+                    <Animated.View 
+                      style={[
+                        styles.overlayContainer, 
+                        styles.leftOverlay, 
+                        { opacity: leftSwipeOverlayOpacity }
+                      ]}
+                    >
+                      <View style={styles.overlayContent}>
+                        <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, {transform: [{rotate: '12deg'}]}]} />
+                        <Text style={styles.latenText}>Later</Text>
+                      </View>
+                    </Animated.View>
+                    {/* Right Swipe (Complete) Overlay */}
+                    <Animated.View 
+                      style={[
+                        styles.overlayContainer, 
+                        styles.rightOverlay, 
+                        { opacity: rightSwipeOverlayOpacity }
+                      ]}
+                    >
+                      <View style={styles.overlayContent}>
+                        <Image source={require('../../assets/icons/GreenCheck.png')} style={styles.overlayIcon} />
+                        <Text style={styles.doneText}>Done</Text>
+                      </View>
+                    </Animated.View>
+                    {/* Upward Swipe (Nudge) Overlay */}
+                    <Animated.View 
+                      style={[
+                        styles.overlayContainer, 
+                        styles.upOverlay, 
+                        { opacity: upSwipeOverlayOpacity }
+                      ]}
+                    >
+                      <View style={styles.overlayContent}>
+                        <Image source={require('../../assets/icons/NudgeIcon.png')} style={styles.overlayIcon} />
+                        <Text style={styles.nudgeText}>Nudge</Text>
+                      </View>
+                    </Animated.View>
+                  </>
+                )}
               </Animated.View>
             );
           }
@@ -508,7 +520,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                 } : null
               ]}
             >
-              <TaskCard task={task} style={styles.centerCard} />
+              {task.id === "add" ? (
+                <AddTaskCard {...addTaskCardProps} />
+              ) : (
+                <TaskCard task={task} style={styles.centerCard} />
+              )}
             </Animated.View>
           );
         })}

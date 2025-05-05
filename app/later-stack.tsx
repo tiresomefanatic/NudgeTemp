@@ -23,14 +23,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { Task } from "@/types/task";
 
 const { width } = Dimensions.get("window");
-// Constants for swipe
-const SWIPE_THRESHOLD = width * 0.3;
+// Constants for swipe - commented out as per requirements
+// const SWIPE_THRESHOLD = width * 0.3;
 
 
 export default function LaterStackScreen() {
 
   const { tasks: postponedTasks, loading } = usePostponedTasks();
-  const [swipingItemId, setSwipingItemId] = useState<string | null>(null);
+  // Commented out swipingItemId state as per requirements
+  // const [swipingItemId, setSwipingItemId] = useState<string | null>(null);
   
   // Function to navigate back to the tasks screen
   const navigateBack = () => {
@@ -62,7 +63,8 @@ export default function LaterStackScreen() {
     }
   };
   
-  // Create swipe handler for a specific task
+  // Create swipe handler for a specific task - Commented out as per requirements
+  /*
   const createSwipeHandler = (task: Task) => {
     // Animation values
     const position = new Animated.ValueXY();
@@ -122,46 +124,46 @@ export default function LaterStackScreen() {
     
     return { position, opacity, panResponder };
   };
+  */
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
 
       {/* Header inside SafeAreaView */}
-      <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
-        <View style={styles.customHeader}>
-          <TouchableOpacity style={styles.headerIconLeft} onPress={navigateBack}>
-            <Image
-              source={require("@/assets/icons/LeftArrow.png")}
-              style={{ width: 24, height: 24 }}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <View style={styles.headerTitleLeft}>
-            <Text style={styles.headerTitle}>Later stack</Text>
-          </View>
-          <View style={styles.headerIconsRight}>
-            <TouchableOpacity onPress={navigateToNotifications}>
-              <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
+      {!loading && (
+        <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
+          <View style={styles.customHeader}>
+            <TouchableOpacity style={styles.headerIconLeft} onPress={navigateBack}>
+              <Image
+                source={require("@/assets/icons/LeftArrow.png")}
+                style={{ width: 24, height: 24 }}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
+            <View style={styles.headerTitleLeft}>
+              <Text style={styles.headerTitle}>All tasks</Text>
+            </View>
+            <View style={styles.headerIconsRight}>
+              <TouchableOpacity onPress={navigateToNotifications}>
+                <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </RNSafeAreaView>
+        </RNSafeAreaView>
+      )}
 
       {/* Content container with task cards */}
       <View style={styles.contentContainer}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0066ff" />
-            <Text style={styles.loadingText}>Loading postponed tasks...</Text>
+            <Text style={styles.loadingText}>Loading all tasks...</Text>
           </View>
         ) : postponedTasks.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="time-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyStateText}>No postponed tasks</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Tasks you postpone will appear here
-            </Text>
+            <Text style={styles.emptyStateText}>No tasks</Text>
           </View>
         ) : (
           <ScrollView 
@@ -170,28 +172,21 @@ export default function LaterStackScreen() {
             showsVerticalScrollIndicator={false}
           >
             {postponedTasks.map(task => {
-              // Create swipe handler for this task
-              const { position, opacity, panResponder } = createSwipeHandler(task);
+              // Removed swipe handler for this task as per requirements
+              // const { position, opacity, panResponder } = createSwipeHandler(task);
               
               return (
-                <Animated.View
+                <View
                   key={task.id}
-                  style={[
-                    styles.taskContainer,
-                    {
-                      transform: [{ translateX: position.x }],
-                      opacity: opacity,
-                    }
-                  ]}
-                  {...panResponder.panHandlers}
+                  style={styles.taskContainer}
                 >
-                  {/* Return to main tasks indicator */}
-                  {swipingItemId === task.id && (
+                  {/* Return to main tasks indicator - Removed as per requirements */}
+                  {/* {swipingItemId === task.id && (
                     <View style={styles.actionIndicator}>
                       <Ionicons name="arrow-back" size={20} color="#39C7A5" />
                       <Text style={styles.actionText}>Move to main tasks</Text>
                     </View>
-                  )}
+                  )} */}
                   
                   <LaterStackTaskCard
                     title={task.title}
@@ -203,7 +198,7 @@ export default function LaterStackScreen() {
                     participants={['A', 'S']} // Mock participants for demo
                     taskId={task.id} 
                   />
-                </Animated.View>
+                </View>
               );
             })}
           </ScrollView>
@@ -277,7 +272,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 12,
     fontSize: 16,
     color: '#666',
   },
