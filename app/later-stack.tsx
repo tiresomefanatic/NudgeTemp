@@ -142,7 +142,7 @@ export default function LaterStackScreen() {
               />
             </TouchableOpacity>
             <View style={styles.headerTitleLeft}>
-              <Text style={styles.headerTitle}>Later stack</Text>
+              <Text style={styles.headerTitle}>All tasks</Text>
             </View>
             <View style={styles.headerIconsRight}>
               <TouchableOpacity onPress={navigateToNotifications}>
