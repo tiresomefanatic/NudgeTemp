@@ -433,6 +433,7 @@ const styles = StyleSheet.create({
     elevation: 8,
     display: 'flex',
     gap: 8,
+    zIndex: 20,
   },
 
   resetButton: {
