@@ -9,6 +9,10 @@ import {
   Dimensions,
   ScrollView,
   Image,
+  Modal,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 
@@ -23,13 +27,23 @@ interface AddTaskCardProps {
   setDetails: (v: string) => void;
 }
 
+// Mock friends data
+const MOCK_FRIENDS = [
+  { id: '1', name: 'Alice' },
+  { id: '2', name: 'Alice' },
+  { id: '3', name: 'Alice' },
+  { id: '4', name: 'Alice' },
+];
+
 export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, details, setDetails }) => {
   const [contributors, setContributors] = useState<string[]>(["Alice", "Rachel"]);
+  const [selectedContributor, setSelectedContributor] = useState<string>("Alice");
   const [dueDate, setDueDate] = useState(false);
   const [repeating, setRepeating] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedRepeat, setSelectedRepeat] = useState<'Daily' | 'Weekly' | 'Monthly'>('Weekly');
   const [monthOffset, setMonthOffset] = useState(0);
+  const [isAddFriendsModalVisible, setIsAddFriendsModalVisible] = useState(false);
 
   // Helper to get days for the current week
   const getWeekDays = (baseDate: Date, weekOffset: number) => {
@@ -68,22 +82,86 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
     </TouchableOpacity>
   );
 
+  const handleContributorSelect = (contributor: string) => {
+    setSelectedContributor(contributor);
+  };
+
+  const openAddFriendsModal = () => {
+    setIsAddFriendsModalVisible(true);
+  };
+
+  const closeAddFriendsModal = () => {
+    setIsAddFriendsModalVisible(false);
+  };
+
+  const handleAddFriend = (friendId: string) => {
+    // Mock implementation - in a real app, this would add the friend to the contributors
+    console.log(`Adding friend with ID: ${friendId}`);
+  };
+
   return (
     <View style={styles.card}>
+      {/* Add Friends Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isAddFriendsModalVisible}
+        onRequestClose={closeAddFriendsModal}
+      >
+        <TouchableWithoutFeedback onPress={closeAddFriendsModal}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.keyboardAvoidingView}
+              >
+                <View style={styles.addFriendsModal}>
+                  <View style={styles.modalIndicator} />
+                  
+                  <Text style={styles.addFriendsTitle}>Add Friends</Text>
+                  
+                  <ScrollView style={styles.friendsList}>
+                    {MOCK_FRIENDS.map((friend) => (
+                      <View key={friend.id} style={styles.friendItem}>
+                        <View style={styles.friendInfo}>
+                          <View style={styles.friendAvatar}>
+                            <Text style={styles.friendAvatarText}>A</Text>
+                          </View>
+                          <Text style={styles.friendName}>{friend.name}</Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.addFriendButton}
+                          onPress={() => handleAddFriend(friend.id)}
+                        >
+                          <Text style={styles.addFriendButtonText}>Add</Text>
+                          <Text style={styles.addFriendButtonPlus}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              </KeyboardAvoidingView>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
-        {/* Title */}
-        <Text style={styles.titleLabel}>Enter a task title</Text>
+        {/* Title - Now this is the main input field */}
         <TextInput
           style={styles.titleInput}
-          placeholder="By Alice"
+          placeholder="Enter a task title"
           value={title}
           onChangeText={setTitle}
           placeholderTextColor="#a5b4fc"
         />
+        {/* By user text - Now this shows the selected contributor */}
+        <Text style={styles.byUserText}>By {selectedContributor}</Text>
+        
         {/* Contributors */}
         <View style={styles.sectionRow}>
           <Text style={styles.sectionHeader}>CONTRIBUTORS</Text>
-          <TouchableOpacity style={styles.addBtn}>
+          <TouchableOpacity style={styles.addBtn} onPress={openAddFriendsModal}>
             <Image 
               source={require('@/assets/icons/Add.png')} 
               style={{ width: 16, height: 16 }} 
@@ -94,11 +172,22 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
         </View>
         <View style={styles.contributorsRow}>
           {contributors.map((c) => (
-            <View key={c} style={styles.contributorPill}>
-              <Text style={styles.contributorPillText}>{c}</Text>
-            </View>
+            <TouchableOpacity 
+              key={c} 
+              style={[
+                styles.contributorPill,
+                selectedContributor === c && styles.selectedContributorPill
+              ]}
+              onPress={() => handleContributorSelect(c)}
+            >
+              <Text style={[
+                styles.contributorPillText,
+                selectedContributor === c && styles.selectedContributorPillText
+              ]}>{c}</Text>
+            </TouchableOpacity>
           ))}
         </View>
+        
         {/* Details */}
         <View style={styles.detailsSection}>
           <View style={styles.detailsHeaderRow}>
@@ -126,6 +215,7 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
             placeholderTextColor="#868B97"
           />
         </View>
+        
         {/* Toggles */}
         <View style={styles.toggleRow}>
           <Text style={styles.toggleLabel}>SET DUE DATE</Text>
@@ -205,42 +295,37 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,    
-    backgroundColor: "#fff",
+    backgroundColor: "#FFF",
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: "#191919",
+    borderColor: "#717683",
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowColor: "rgba(56, 0, 255, 0.10)",
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 6,
     alignSelf: "center",
     padding: 20,
   },
-  titleLabel: {
+  titleInput: {
     fontSize: 24,
     fontFamily: 'Pally',
-    color: '#A79EFF',
+    color: '#3800FF',
+    fontWeight: '600',
     lineHeight: 32,
     letterSpacing: 0.15,
     marginBottom: 4,
+    borderBottomWidth: 0,
+    paddingVertical: 0,
   },
-  titleInput: {
+  byUserText: {
     fontSize: 14,
     fontWeight: '400',
-    color: '#868B97',
+    color: '#717683',
     fontFamily: 'Urbanist',
-    borderBottomWidth: 1,
-    borderColor: '#0000001A',
-    marginBottom: 2,
-    paddingVertical: 4,
+    marginBottom: 16,
     lineHeight: 21,
-  },
-  byText: {
-    color: '#64748b',
-    fontSize: 14,
-    marginBottom: 12,
   },
   sectionHeader: {
     fontSize: 14,
@@ -249,22 +334,18 @@ const styles = StyleSheet.create({
     color: '#B2B5BD',
     lineHeight: 16,
     letterSpacing: 0.15,
-    marginBottom: 4,
-    marginTop: 10,
   },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 8,
     marginBottom: 8,
-    marginTop: 20,
   },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
   },
   addBtnText: {
     color: '#5E626E',
@@ -276,22 +357,29 @@ const styles = StyleSheet.create({
   },
   contributorsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     marginBottom: 24,
   },
   contributorPill: {
     borderWidth: 1,
     borderColor: '#1A0075',
-    borderRadius: 8,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 4,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  selectedContributorPill: {
+    backgroundColor: '#3800FF',
   },
   contributorPillText: {
     fontWeight: '600',
-    fontStyle: 'italic',
     color: '#22223b',
+  },
+  selectedContributorPillText: {
+    color: '#FFFFFF',
   },
   detailsSection: {
     marginBottom: 8,
@@ -473,6 +561,109 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     lineHeight: 20,
     letterSpacing: 0,
+  },
+  // Add Friends Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  keyboardAvoidingView: {
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
+  addFriendsModal: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderLeftWidth: 1,
+    borderColor: '#393B42',
+    padding: 20,
+    minHeight: 300,
+    shadowColor: 'rgba(56, 0, 255, 0.10)',
+    shadowOffset: {
+      width: 0,
+      height: -12,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 20,
+  },
+  modalIndicator: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    backgroundColor: '#E6E6E6',
+    borderRadius: 2,
+    marginBottom: 20,
+  },
+  addFriendsTitle: {
+    color: '#393B42',
+    fontFamily: 'Space Grotesk',
+    fontSize: 16,
+    fontWeight: '500',
+    lineHeight: 20,
+    letterSpacing: 0.15,
+    marginBottom: 16,
+  },
+  friendsList: {
+    maxHeight: 400,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  friendInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  friendAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3800FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  friendAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  friendName: {
+    color: '#B2B5BD',
+    fontFamily: 'Space Grotesk',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    letterSpacing: 0.15,
+  },
+  addFriendButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#7267FF',
+    padding: 6,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  addFriendButtonText: {
+    color: '#7267FF',
+    fontFamily: 'Pally',
+    fontSize: 14,
+    fontWeight: '300',
+    lineHeight: 20,
+  },
+  addFriendButtonPlus: {
+    color: '#7267FF',
+    fontSize: 14,
   },
 });
 
