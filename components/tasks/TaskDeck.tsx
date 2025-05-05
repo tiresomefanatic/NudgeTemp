@@ -114,14 +114,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     // Get the task being postponed
     const taskToPostpone = activeTasks[index];
 
-    // Call the parent's callback to save it to the database
+    // Call the parent's callback to mark the task as postponed
     onPostpone(taskToPostpone);
     
-    // Update the current index
+    // Update the current index to show the next task
     setCardIndex(prevIndex => prevIndex + 1);
     
     // Reset immediately (without animation) for a clean state for the next card
     position.setValue({ x: 0, y: 0 });
+    
+    // Note: We don't need to manually move the task here as the useTasks hook
+    // will now return all tasks with postponed ones at the end of the queue
   }, [activeTasks, onPostpone]);
 
   // Function to handle when a card is swiped right (completed)
