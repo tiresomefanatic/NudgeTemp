@@ -23,14 +23,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { Task } from "@/types/task";
 
 const { width } = Dimensions.get("window");
-// Constants for swipe
-const SWIPE_THRESHOLD = width * 0.3;
+// Constants for swipe - commented out as per requirements
+// const SWIPE_THRESHOLD = width * 0.3;
 
 
 export default function LaterStackScreen() {
 
   const { tasks: postponedTasks, loading } = usePostponedTasks();
-  const [swipingItemId, setSwipingItemId] = useState<string | null>(null);
+  // Commented out swipingItemId state as per requirements
+  // const [swipingItemId, setSwipingItemId] = useState<string | null>(null);
   
   // Function to navigate back to the tasks screen
   const navigateBack = () => {
@@ -62,7 +63,8 @@ export default function LaterStackScreen() {
     }
   };
   
-  // Create swipe handler for a specific task
+  // Create swipe handler for a specific task - Commented out as per requirements
+  /*
   const createSwipeHandler = (task: Task) => {
     // Animation values
     const position = new Animated.ValueXY();
@@ -122,6 +124,7 @@ export default function LaterStackScreen() {
     
     return { position, opacity, panResponder };
   };
+  */
 
   return (
     <SafeAreaView style={styles.container}>
@@ -170,28 +173,21 @@ export default function LaterStackScreen() {
             showsVerticalScrollIndicator={false}
           >
             {postponedTasks.map(task => {
-              // Create swipe handler for this task
-              const { position, opacity, panResponder } = createSwipeHandler(task);
+              // Removed swipe handler for this task as per requirements
+              // const { position, opacity, panResponder } = createSwipeHandler(task);
               
               return (
-                <Animated.View
+                <View
                   key={task.id}
-                  style={[
-                    styles.taskContainer,
-                    {
-                      transform: [{ translateX: position.x }],
-                      opacity: opacity,
-                    }
-                  ]}
-                  {...panResponder.panHandlers}
+                  style={styles.taskContainer}
                 >
-                  {/* Return to main tasks indicator */}
-                  {swipingItemId === task.id && (
+                  {/* Return to main tasks indicator - Removed as per requirements */}
+                  {/* {swipingItemId === task.id && (
                     <View style={styles.actionIndicator}>
                       <Ionicons name="arrow-back" size={20} color="#39C7A5" />
                       <Text style={styles.actionText}>Move to main tasks</Text>
                     </View>
-                  )}
+                  )} */}
                   
                   <LaterStackTaskCard
                     title={task.title}
@@ -203,7 +199,7 @@ export default function LaterStackScreen() {
                     participants={['A', 'S']} // Mock participants for demo
                     taskId={task.id} 
                   />
-                </Animated.View>
+                </View>
               );
             })}
           </ScrollView>
