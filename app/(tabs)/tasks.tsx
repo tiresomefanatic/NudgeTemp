@@ -242,10 +242,13 @@ export default function TasksScreen() {
           <ActivityIndicator size="large" color="#0066ff" />
         ) : deckTasks.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="checkbox-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyStateText}>No tasks yet</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Tap the + button to add a new task
+            <Image 
+              source={require("@/assets/EmptyTask.png")} 
+              style={styles.emptyStateImage} 
+              resizeMode="contain"
+            />
+            <Text style={styles.emptyStateText}>
+              Your task list is empty. Add one and start nudging!
             </Text>
           </View>
         ) : (
@@ -414,20 +417,22 @@ const styles = StyleSheet.create({
   nudgeFab: {
     position: 'absolute',
     bottom: 38,
-    right: 28,
+    left: '50%',
+    marginLeft: -24, // Half the width to center it
     width: 48,
     height: 48,
     padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#1249D3',
+    borderRadius: 40,
+    backgroundColor: '#3800FF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
-    elevation: 7,
-    zIndex: 10,
+    elevation: 8,
+    display: 'flex',
+    gap: 8,
   },
 
   resetButton: {
@@ -447,7 +452,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#f7f7f7',
   },
   header: {
     paddingHorizontal: 20,
@@ -470,7 +474,7 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: 0,
     paddingBottom: 40,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F4F4F6',
   },
   footer: {
     width: '100%',
@@ -503,14 +507,24 @@ const styles = StyleSheet.create({
   },
 
   emptyState: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    padding: 20,
+  },
+  emptyStateImage: {
+    width: 189,
+    height: 213,
+    marginBottom: 24,
   },
   emptyStateText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#666",
-    marginTop: 12,
+    color: "#9CA0AA",
+    textAlign: "center",
+    fontFamily: "Pally",
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 32,
+    letterSpacing: -0.25,
   },
   emptyStateSubtext: {
     fontSize: 14,
