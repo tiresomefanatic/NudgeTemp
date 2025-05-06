@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -99,6 +99,15 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
     console.log(`Adding friend with ID: ${friendId}`);
   };
 
+  const titleInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    // Focus the title input when the card mounts
+    if (titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, []);
+
   return (
     <View style={styles.card}>
       {/* Add Friends Modal */}
@@ -149,6 +158,7 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
         {/* Title - Now this is the main input field */}
         <TextInput
+          ref={titleInputRef}
           style={styles.titleInput}
           placeholder="Enter a task title"
           value={title}
