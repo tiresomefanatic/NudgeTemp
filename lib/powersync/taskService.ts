@@ -486,3 +486,84 @@ export const nudgeTask = async (id: string): Promise<void> => {
     throw error;
   }
 };
+
+// Hook to get all tasks - using PowerSync's reactive approach
+export const useAllTasks = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const sql = `SELECT * FROM tasks 
+        ORDER BY created_at DESC`;
+
+  useEffect(() => {
+    console.log("🔍 Setting up all tasks watcher...");
+
+    // Create an unsubscribe function
+    let unsubscribe: () => void;
+
+    // Initial query and watch setup
+    const setupWatcher = async () => {
+      try {
+        // Get initial data
+        const result = await powersync.execute(sql);
+        if (result.rows?._array) {
+          const tasksList = result.rows._array.map(toAppTask);
+          console.log("📝 Found", tasksList.length, "total tasks");
+          setTasks(tasksList);
+          setLoading(false);
+        }
+
+        // Set up watcher for changes
+        const watcher = powersync.watch(sql);
+
+        // Create async iterator
+        const iterator = watcher[Symbol.asyncIterator]();
+
+        // Process function that will be called each time there's a change
+        const processNext = async () => {
+          try {
+            const { value: result, done } = await iterator.next();
+            if (done) return;
+
+            if (result.rows?._array) {
+              const tasksList = result.rows._array.map(toAppTask);
+              console.log(
+                "📝 Found",
+                tasksList.length,
+                "total tasks (reactive update)"
+              );
+              setTasks(tasksList);
+            }
+
+            // Continue watching for next change
+            processNext();
+          } catch (err) {
+            console.error("❌ Error in all tasks watcher:", err);
+          }
+        };
+
+        // Start processing changes
+        processNext();
+
+        // Define cleanup
+        unsubscribe = () => {
+          // Just let the iterator be garbage collected
+          // No explicit .return() needed as it may not be available on all implementations
+        };
+      } catch (error) {
+        console.error("❌ Error setting up all tasks watcher:", error);
+        setLoading(false);
+      }
+    };
+
+    setupWatcher();
+
+    // Cleanup function
+    return () => {
+      console.log("🔒 Cleaning up all tasks watcher");
+      unsubscribe?.();
+    };
+  }, []);
+
+  return { tasks, loading };
+};
