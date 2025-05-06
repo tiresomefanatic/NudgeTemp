@@ -279,32 +279,8 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   // Check if all cards have been swiped
   useEffect(() => {
-    // If no more cards at all, but only call onFinish if it exists
-    // AND there are no postponed tasks in the system
-    if (cardIndex >= activeTasks.length && onFinish) {
-      // We should check for postponed tasks in the app before showing "All Done!"
-      // This prevents showing "All Done!" when there are postponed tasks
-      
-      // Check for any postponed tasks before showing "All Done!"
-      const checkPostponedTasks = async () => {
-        try {
-          // Query for any postponed tasks
-          const result = await powersync.execute(
-            "SELECT COUNT(*) as count FROM tasks WHERE is_postponed = 1"
-          );
-          
-          // Only call onFinish if there are no postponed tasks
-          const postponedCount = result.rows?._array?.[0]?.count || 0;
-          if (postponedCount === 0) {
-            onFinish();
-          }
-        } catch (error) {
-          console.error("Error checking for postponed tasks:", error);
-        }
-      };
-      
-      checkPostponedTasks();
-    }
+    // No longer need to call onFinish when all cards are swiped
+    // This prevents the "All Done!" popup from appearing
   }, [cardIndex, activeTasks.length, onFinish]);
 
   // Animate card transitions
@@ -365,11 +341,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     return (
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
-          {!hasPostponedTasks ? (
-            <Text style={styles.emptyText}>All done for today! 🎉</Text>
-          ) : (
-            <Text style={styles.emptyText}>No active tasks</Text>
-          )}
+          <Text style={styles.emptyText}>Your task list is empty</Text>
         </View>
       </View>
     );
