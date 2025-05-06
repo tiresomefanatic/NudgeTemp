@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { clearAllTasks } from '@/lib/powersync/taskService';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 export default function ResetScreen() {
   const router = useRouter();
+  const { session, signOut } = useAuth();
   const [isClearing, setIsClearing] = useState(false);
+
+  // Redirect to auth if not logged in
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
 
   const handleClearAllTasks = async () => {
     try {

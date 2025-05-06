@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -14,13 +14,14 @@ import {
   Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router } from "expo-router";
+import { router, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import LaterStackTaskCard from "@/components/tasks/LaterStackTaskCard";
 import { useAllTasks, unpostponeTask } from "@/lib/powersync/taskService";
 import { Ionicons } from "@expo/vector-icons";
 import { Task } from "@/types/task";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 const { width } = Dimensions.get("window");
 // Constants for swipe - commented out as per requirements
@@ -28,6 +29,12 @@ const { width } = Dimensions.get("window");
 
 
 export default function LaterStackScreen() {
+  const { session } = useAuth();
+  
+  // Redirect to auth if not logged in
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
 
   const { tasks: allTasks, loading } = useAllTasks();
   // Commented out swipingItemId state as per requirements

@@ -20,11 +20,11 @@ export default function AuthIndex() {
     );
   }
 
-  // If user is authenticated, redirect to main app
+  // If user is authenticated, redirect to tasks
   if (session) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/(tabs)/tasks" />;
   }
 
   // Otherwise, redirect to login
-  return <Redirect href="login" />;
+  return <Redirect href="/login" />;
 }

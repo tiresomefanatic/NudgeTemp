@@ -115,7 +115,7 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity style={styles.forgotPassword} onPress={() => {}}>
-            <Link href="reset-password">
+            <Link href="/reset-password">
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </Link>
           </TouchableOpacity>
@@ -142,7 +142,7 @@ export default function LoginScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
-          <Link href="signup">
+          <Link href="/signup">
             <Text style={styles.signUpLink}>Sign Up</Text>
           </Link>
         </View>

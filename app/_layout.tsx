@@ -7,7 +7,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import "react-native-reanimated";
 import { View, Text } from "react-native";
 
@@ -38,21 +38,17 @@ function RootLayoutNav() {
     <PowerSyncProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
-          {/* Force directly to tasks screen, bypassing all conditional routing */}
-          <Stack.Screen name="(tabs)/tasks" options={{ headerShown: false }} />
-          
-          <Stack.Screen name="notifications" options={{ headerShown: false }} />
-          <Stack.Screen name="later-stack" options={{ headerShown: false }} />
-          
-          {/* Original authentication and routing completely bypassed
           {session ? (
             // Authenticated routes
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)/tasks" options={{ headerShown: false }} />
           ) : (
             // Unauthenticated routes
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           )}
-          */}
+          
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
+          <Stack.Screen name="later-stack" options={{ headerShown: false }} />
+          
           <Stack.Screen name="+not-found" options={{ title: "Not Found" }} />
         </Stack>
         <StatusBar style="auto" />

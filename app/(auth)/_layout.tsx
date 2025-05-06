@@ -1,3 +1,4 @@
+import React from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -7,10 +8,10 @@ export default function AuthLayout() {
   const { session } = useAuth();
   const router = useRouter();
   
-  // If user is already authenticated, redirect to the main app
+  // If user is already authenticated, redirect to the tasks screen
   useEffect(() => {
     if (session) {
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/tasks');
     }
   }, [session, router]);
 
