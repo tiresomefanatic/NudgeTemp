@@ -164,6 +164,7 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
           value={title}
           onChangeText={setTitle}
           placeholderTextColor="#a5b4fc"
+          autoFocus={true}
         />
         {/* By user text - Now this shows the selected contributor */}
         <Text style={styles.byUserText}>By {selectedContributor}</Text>
