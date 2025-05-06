@@ -105,6 +105,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     extrapolate: 'clamp',
   });
 
+  // Add animation refs for the entire stack
+  const secondCardScale = useRef(new Animated.Value(0.97)).current;
+  const secondCardTranslateY = useRef(new Animated.Value(-18)).current;
+  const thirdCardScale = useRef(new Animated.Value(0.94)).current;
+  const thirdCardTranslateY = useRef(new Animated.Value(-36)).current;
+  const [isPromotingCards, setIsPromotingCards] = useState(false);
+
   // Initialize the deck when we receive initialTasks
   useEffect(() => {
     if (initialTasks && initialTasks.length > 0) {
@@ -195,59 +202,79 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     }
   };
 
-  // Pre-position the next card for a smooth transition
-  const prepareNextCard = () => {
-    // Start transition animation from 0
-    transitionAnimation.setValue(0);
-    
-    // Mark that we're in transition
-    setIsTransitioning(true);
-    
-    // Start the transition animation immediately
-    Animated.spring(transitionAnimation, {
-      toValue: 1,
-      friction: 6.5,
-      tension: 40,
-      restDisplacementThreshold: 0.01,
-      restSpeedThreshold: 0.01,
-      useNativeDriver: true,
-    }).start(() => {
-      setIsTransitioning(false);
+  // Modified to animate the entire stack (both 2nd and 3rd cards)
+  const animateStackPromotion = useCallback(() => {
+    setIsPromotingCards(true);
+    return new Promise<void>((resolve) => {
+      Animated.parallel([
+        // Animate 2nd card to top position
+        Animated.timing(secondCardScale, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(secondCardTranslateY, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        // Animate 3rd card to 2nd position
+        Animated.timing(thirdCardScale, {
+          toValue: 0.97,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(thirdCardTranslateY, {
+          toValue: -18,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Reset animation values for next time
+        secondCardScale.setValue(0.97);
+        secondCardTranslateY.setValue(-18);
+        thirdCardScale.setValue(0.94);
+        thirdCardTranslateY.setValue(-36);
+        setIsPromotingCards(false);
+        resolve();
+      });
     });
-  };
+  }, [secondCardScale, secondCardTranslateY, thirdCardScale, thirdCardTranslateY]);
 
-  // Execute a complete swipe sequence (swipe out current card, bring next card to top)
-  const completeSwipe = (direction: 'left' | 'right', index: number, gesture: { dx: number, dy: number }) => {
-    // Prevent multiple simultaneous swipe animations
-    if (isSwipeAnimating) return;
-    
-    // Mark that we're animating this specific card
-    setIsSwipeAnimating(true);
-    animatingCardIndex.current = index;
-    
-    // Start preparing the next card immediately, don't wait for the current card to leave
-    prepareNextCard();
-    
-    // Set the target position for the card that's being swiped out
-    const targetX = direction === 'left' ? -width * 1.5 : width * 1.5;
-    
-    // Animate the current card away
-    Animated.timing(position, {
-      toValue: { x: targetX, y: gesture.dy },
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
+  // Modified completeSwipe to use the stack promotion animation
+  const completeSwipe = useCallback(
+    async (direction: 'left' | 'right', index: number, gesture: { dx: number, dy: number }) => {
+      if (isSwipeAnimating) return;
+      setIsSwipeAnimating(true);
+      animatingCardIndex.current = index;
+
+      // Animate outgoing card
+      const targetX = direction === 'left' ? -width * 1.5 : width * 1.5;
+      await new Promise<void>((resolve) => {
+        Animated.timing(position, {
+          toValue: { x: targetX, y: gesture.dy },
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          resolve();
+        });
+      });
+
+      // Animate full stack promotion if there are enough cards
+      if (activeTasks.length > cardIndex + 1) {
+        await animateStackPromotion();
+      }
+
       // Reset position immediately before the state updates
       position.setValue({ x: 0, y: 0 });
-      
+
       // Update state after animation is complete
       if (direction === 'left') {
         handleSwipedLeft(index);
       } else {
         handleSwipedRight(index);
       }
-    });
-  };
+    }, [isSwipeAnimating, position, activeTasks, cardIndex, handleSwipedLeft, handleSwipedRight, animateStackPromotion]);
 
   // Create pan responder for swipe gestures
   const panResponder = useMemo(() => PanResponder.create({
@@ -421,87 +448,67 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   // Render stack cards (show top 3 cards)
   const renderStackCards = () => {
-    // Get up to 3 cards to show in the stack
     const visibleCards = activeTasks.slice(cardIndex, cardIndex + 3);
-    
-    // Render cards from back to front (bottom to top)
-    // This way, the first card (current card) will be on top in z-index
     return (
       <View style={styles.cardsContainer}>
-        {/* Render cards in order from bottom to top */}
         {visibleCards.map((task, idx) => {
-          // If the top card is AddTaskCard, give it a slightly larger offset
           let cardYPosition = -18 * idx;
-          if (idx === 0 && task.id === "add") {
-            cardYPosition = -28; // lift AddTaskCard a bit more for even spacing
-          }
+          if (idx === 0 && task.id === "add") cardYPosition = -28;
           const isTopCard = idx === 0;
-          
-          // Scale and position values for the stack effect
+          const isSecondCard = idx === 1;
+          const isThirdCard = idx === 2;
           const cardScale = 1 - (idx * 0.03);
-          
-          // Only apply pan responder to top card if it's not being animated out
-          const shouldApplyPanResponder = isTopCard && 
-                                          task.id !== "add" && 
-                                          !isSwipeAnimating;
-                                        
-          // For the second card, apply a transition animation when it becomes the top card
-          const secondCardAnimation = isTransitioning && idx === 0 ? {
-            // Start from a position behind and scale slightly smaller
-            transform: [
-              { 
-                scale: transitionAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.97, 1],
-                })
-              },
-              {
-                translateY: transitionAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-18, cardYPosition],
-                })
-              }
-            ],
-            // Fade in to normal opacity
-            opacity: transitionAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.95, 1],
-            })
-          } : {};
-          
-          // Card styling
+          const shouldApplyPanResponder = isTopCard && task.id !== "add" && !isSwipeAnimating;
+
+          // Animation styles for each card position
+          let animatedStyle = {};
+          if (isPromotingCards) {
+            if (isSecondCard) {
+              animatedStyle = {
+                transform: [
+                  { scale: secondCardScale },
+                  { translateY: secondCardTranslateY },
+                ],
+                zIndex: 2,
+              };
+            } else if (isThirdCard) {
+              animatedStyle = {
+                transform: [
+                  { scale: thirdCardScale },
+                  { translateY: thirdCardTranslateY },
+                ],
+                zIndex: 1,
+              };
+            }
+          }
+
           const cardStyle = {
             ...styles.cardStyle,
-            // Top card has highest z-index
             zIndex: 3 - idx,
-            // Decrease opacity for cards in the back
             opacity: 1 - (idx * 0.05),
             transform: [
-              // Decrease scale for cards in the back
               { scale: cardScale },
-              // Position cards vertically with the active card at the bottom
-              { translateY: cardYPosition }
+              { translateY: cardYPosition },
             ],
-            ...(isTopCard && isTransitioning ? secondCardAnimation : {}),
+            ...animatedStyle,
           };
 
-          // For top card, add position and rotation animations
           if (isTopCard) {
             return (
-              <Animated.View 
-                key={`${task.id}-${cardIndex}`} 
+              <Animated.View
+                key={`${task.id}-${cardIndex}`}
                 style={[
-                  styles.cardStyle, 
-                  cardStyle, 
+                  styles.cardStyle,
+                  cardStyle,
                   {
                     transform: [
                       { translateX: position.x },
                       { translateY: position.y },
                       { scale: cardScale },
-                      { rotate: rotateAnimValue }
+                      { rotate: rotateAnimValue },
                     ],
                     opacity: cardOpacity,
-                  }
+                  },
                 ]}
                 {...(shouldApplyPanResponder ? panResponder.panHandlers : {})}
               >
@@ -516,24 +523,24 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                 {task.id !== "add" && (
                   <>
                     {/* Left Swipe (Postpone) Overlay */}
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.overlayContainer, 
-                        styles.leftOverlay, 
-                        { opacity: leftSwipeOverlayOpacity }
+                        styles.overlayContainer,
+                        styles.leftOverlay,
+                        { opacity: leftSwipeOverlayOpacity },
                       ]}
                     >
                       <View style={styles.overlayContent}>
-                        <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, {transform: [{rotate: '12deg'}]}]} />
+                        <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, { transform: [{ rotate: '12deg' }] }]} />
                         <Text style={styles.latenText}>Later</Text>
                       </View>
                     </Animated.View>
                     {/* Right Swipe (Complete) Overlay */}
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.overlayContainer, 
-                        styles.rightOverlay, 
-                        { opacity: rightSwipeOverlayOpacity }
+                        styles.overlayContainer,
+                        styles.rightOverlay,
+                        { opacity: rightSwipeOverlayOpacity },
                       ]}
                     >
                       <View style={styles.overlayContent}>
@@ -542,11 +549,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                       </View>
                     </Animated.View>
                     {/* Upward Swipe (Nudge) Overlay */}
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.overlayContainer, 
-                        styles.upOverlay, 
-                        { opacity: upSwipeOverlayOpacity }
+                        styles.overlayContainer,
+                        styles.upOverlay,
+                        { opacity: upSwipeOverlayOpacity },
                       ]}
                     >
                       <View style={styles.overlayContent}>
@@ -560,14 +567,27 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
             );
           }
 
-          // For next card that's about to become the top
+          // For second and third cards, apply animated promotion styles
+          if ((isSecondCard || isThirdCard) && isPromotingCards) {
+            return (
+              <Animated.View
+                key={`${task.id}-${cardIndex}-${idx}`}
+                style={[styles.cardStyle, cardStyle]}
+              >
+                {task.id === "add" ? (
+                  <AddTaskCard {...addTaskCardProps} />
+                ) : (
+                  <TaskCard task={task} style={styles.centerCard} />
+                )}
+              </Animated.View>
+            );
+          }
+
+          // For all other cards
           return (
-            <Animated.View 
-              key={`${task.id}-${cardIndex}-${idx}`} 
-              style={[
-                styles.cardStyle, 
-                cardStyle
-              ]}
+            <Animated.View
+              key={`${task.id}-${cardIndex}-${idx}`}
+              style={[styles.cardStyle, cardStyle]}
             >
               {task.id === "add" ? (
                 <AddTaskCard {...addTaskCardProps} />
