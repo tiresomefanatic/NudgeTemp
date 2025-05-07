@@ -10,7 +10,7 @@ import { Platform } from "react-native";
 
 // URL for handling OAuth redirects
 const redirectTo = makeRedirectUri({
-  scheme: Constants.manifest?.scheme || "nudge",
+  scheme: "nudge", // Use hardcoded scheme name
 });
 
 // Initialize WebBrowser for OAuth redirects
@@ -58,22 +58,66 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Create a user record in the database
+  const createUserInDatabase = async (user: User) => {
+    try {
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found"
+        console.error('Error checking if user exists:', checkError);
+        return;
+      }
+
+      // If user doesn't exist, create them
+      if (!existingUser) {
+        const { error } = await supabase.from('users').insert({
+          email: user.email,
+          first_name: user.user_metadata?.full_name ? user.user_metadata.full_name.split(' ')[0] : null,
+          last_name: user.user_metadata?.full_name ? user.user_metadata.full_name.split(' ').slice(1).join(' ') : null,
+        });
+
+        if (error) {
+          console.error('Error creating user in database:', error);
+        } else {
+          console.log('User created in database successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error in createUserInDatabase:', error);
+    }
+  };
+
   // Initialize auth state on mount
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Create user in database if they exist in auth but not in the database
+      if (session?.user) {
+        createUserInDatabase(session.user);
+      }
+      
       setLoading(false);
     });
 
     // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log("Auth state changed:", _event);
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Create user in database on sign-up or sign-in
+      if (_event === 'SIGNED_IN' && session?.user) {
+        await createUserInDatabase(session.user);
+      }
     });
 
     // Listen for deep links while the app is open
@@ -95,8 +139,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       if (!error) {
-        // Navigate directly to tasks page instead of root
-        router.replace({ pathname: "/(tabs)/tasks" }); // Redirect to tasks instead of root
+        // Redirect to tabs on successful sign in
+        router.replace("/(tabs)");
       }
 
       return { error };
@@ -117,9 +161,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         },
       });
 
-      if (!error) {
+      if (!error && data?.user) {
+        // Create the user in our database
+        await createUserInDatabase(data.user);
+        
         // Navigate to confirmation screen
-        router.navigate({ pathname: "confirm-email" });
+        router.navigate("/(auth)/confirm-email");
       }
 
       return { data, error: error as Error | null };
@@ -133,8 +180,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
-      // Navigate directly to tasks page instead of login
-      router.replace({ pathname: "/(tabs)/tasks" });
+      // Redirect to auth flow
+      router.replace("/(auth)");
     } catch (error) {
       console.error("Sign out error:", error);
     }
@@ -188,6 +235,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 access_token: access_token as string,
                 refresh_token: refresh_token as string,
               });
+              
+              // Redirect to the tasks screen after successful OAuth login
+              router.replace("/(tabs)/tasks");
             }
           }
         }
@@ -237,6 +287,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 access_token: access_token as string,
                 refresh_token: refresh_token as string,
               });
+              
+              // Redirect to the tasks screen after successful OAuth login
+              router.replace("/(tabs)/tasks");
             }
           }
         }

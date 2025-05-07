@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -14,13 +14,14 @@ import {
   Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router } from "expo-router";
+import { router, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import LaterStackTaskCard from "@/components/tasks/LaterStackTaskCard";
-import { usePostponedTasks, unpostponeTask } from "@/lib/powersync/taskService";
+import { useAllTasks, unpostponeTask } from "@/lib/powersync/taskService";
 import { Ionicons } from "@expo/vector-icons";
 import { Task } from "@/types/task";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 const { width } = Dimensions.get("window");
 // Constants for swipe - commented out as per requirements
@@ -28,8 +29,14 @@ const { width } = Dimensions.get("window");
 
 
 export default function LaterStackScreen() {
+  const { session } = useAuth();
+  
+  // Redirect to auth if not logged in
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
 
-  const { tasks: postponedTasks, loading } = usePostponedTasks();
+  const { tasks: allTasks, loading } = useAllTasks();
   // Commented out swipingItemId state as per requirements
   // const [swipingItemId, setSwipingItemId] = useState<string | null>(null);
   
@@ -51,7 +58,7 @@ export default function LaterStackScreen() {
       
       // If this was the last postponed task and we're unpostponing it,
       // navigate back to the main tasks screen to avoid UI issues
-      if (postponedTasks.length <= 1) {
+      if (allTasks.filter(t => t.isPostponed).length <= 1) {
         // Small delay to let the state update before navigating
         setTimeout(() => {
           router.back();
@@ -160,7 +167,7 @@ export default function LaterStackScreen() {
             <ActivityIndicator size="large" color="#0066ff" />
             <Text style={styles.loadingText}>Loading all tasks...</Text>
           </View>
-        ) : postponedTasks.length === 0 ? (
+        ) : allTasks.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="time-outline" size={64} color="#ccc" />
             <Text style={styles.emptyStateText}>No tasks</Text>
@@ -171,7 +178,7 @@ export default function LaterStackScreen() {
             contentContainerStyle={styles.scrollViewContent}
             showsVerticalScrollIndicator={false}
           >
-            {postponedTasks.map(task => {
+            {allTasks.map(task => {
               // Removed swipe handler for this task as per requirements
               // const { position, opacity, panResponder } = createSwipeHandler(task);
               
@@ -191,7 +198,7 @@ export default function LaterStackScreen() {
                   <LaterStackTaskCard
                     title={task.title}
                     userName={task.id.startsWith('a') ? 'Alice' : 'Sam'} // Mock user name based on ID for demo
-                    date={new Date(task.postponedAt || '').toLocaleDateString('en-US', {
+                    date={new Date(task.postponedAt || task.createdAt || new Date().toISOString()).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}

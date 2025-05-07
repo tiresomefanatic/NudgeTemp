@@ -14,9 +14,10 @@ import {
   Dimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from "@/lib/auth/AuthContext";
 
 // Define chat message type
 interface ChatMessage {
@@ -76,10 +77,16 @@ const mockChatData: ChatMessage[] = [
 ];
 
 export default function NotesScreen() {
+  const { session } = useAuth();
   const { taskId, taskTitle } = useLocalSearchParams();
   const [inputText, setInputText] = useState('');
   const [isInputFocused, setIsInputFocused] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Redirect to auth if not logged in
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
   
   // Function to navigate back
   const navigateBack = () => {
