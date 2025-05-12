@@ -139,8 +139,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       if (!error) {
-        // Redirect to tabs on successful sign in
-        router.replace("/(tabs)");
+        // Redirect to tasks tab on successful sign in
+        router.replace("/(tabs)/tasks");
       }
 
       return { error };

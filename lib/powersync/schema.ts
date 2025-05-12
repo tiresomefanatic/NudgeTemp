@@ -13,14 +13,15 @@ const tasks = new Table(
     completed_at: column.text,
     postponed_at: column.text,
     postponed_count: column.integer,
-    user_id: column.text,
+    creator_id: column.integer,
+    category: column.text,
     is_completed: column.integer,
     is_postponed: column.integer,
   },
   { 
     indexes: { 
       priority_idx: ['priority'],
-      user_idx: ['user_id'],
+      creator_idx: ['creator_id'],
       status_idx: ['is_completed', 'is_postponed'],
       created_idx: ['created_at']
     } 

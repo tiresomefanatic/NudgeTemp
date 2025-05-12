@@ -23,6 +23,8 @@ import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
 import { powersync } from "@/lib/powersync/database";
 import AddTaskCard from "./AddTaskCard";
+import { getCurrentUserRoleForTask } from "@/lib/powersync/taskService";
+import { useCurrentUser } from "@/lib/powersync/userService";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85;
@@ -63,6 +65,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const [checkingPostponedTasks, setCheckingPostponedTasks] = useState(true);
   // Animation value for list transitions
   const listAnimationValue = useRef(new Animated.Value(0)).current;
+  
+  // User role tracking for each task
+  const [userRoles, setUserRoles] = useState<Record<string, 'owner' | 'nudger' | null>>({});
+  const [loadingRoles, setLoadingRoles] = useState(true);
+  const { user: currentUser } = useCurrentUser();
   
   // Animation values for the card
   const position = useRef(new Animated.ValueXY()).current;
@@ -123,8 +130,91 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       transitionAnimation.setValue(0);
       setIsSwipeAnimating(false);
       animatingCardIndex.current = -1;
+      
+      // Set immediate optimistic permissions for the top task
+      if (initialTasks[0]?.id !== 'add' && currentUser) {
+        const topTask = initialTasks[0];
+        const tempRoles = { ...userRoles };
+        
+        // If user is creator, they're the owner
+        if (topTask.creatorId === currentUser.id) {
+          tempRoles[topTask.id] = 'owner';
+        } 
+        // Otherwise, assume they might be a nudger for optimistic UI
+        // The actual role will be updated when fetchUserRolesForTasks completes
+        else if (topTask.creatorId !== currentUser.id) {
+          tempRoles[topTask.id] = 'nudger';
+        }
+        
+        setUserRoles(tempRoles);
+      }
+      
+      // Then fetch accurate roles for all tasks
+      fetchUserRolesForTasks(initialTasks);
     }
-  }, [initialTasks]);
+  }, [initialTasks, currentUser]);
+  
+  // Function to fetch user roles for all tasks
+  const fetchUserRolesForTasks = useCallback(async (tasks: Task[]) => {
+    if (!currentUser) return;
+    
+    setLoadingRoles(true);
+    const roles: Record<string, 'owner' | 'nudger' | null> = {};
+    
+    // Batch fetch approach - create an array of promises for all tasks
+    const rolePromises = tasks
+      .filter(task => task.id !== 'add')
+      .map(async task => {
+        try {
+          const role = await getCurrentUserRoleForTask(task.id);
+          return { taskId: task.id, role };
+        } catch (error) {
+          console.error('Error fetching role for task:', task.id, error);
+          return { taskId: task.id, role: null };
+        }
+      });
+    
+    // Wait for all role fetches to complete
+    const results = await Promise.all(rolePromises);
+    
+    // Convert results to the roles object
+    results.forEach(result => {
+      roles[result.taskId] = result.role;
+    });
+    
+    setUserRoles(roles);
+    setLoadingRoles(false);
+  }, [currentUser]);
+  
+  // Check if user can complete a task with optimistic fallback
+  const canCompleteTask = useCallback((taskId: string) => {
+    // If roles are loading and this is the top card, optimistically allow
+    if (loadingRoles && taskId === activeTasks[cardIndex]?.id) {
+      // Default permissions for top card while loading: 
+      // Allow complete if user created the task
+      const task = activeTasks.find(t => t.id === taskId);
+      if (task && task.creatorId === currentUser?.id) {
+        return true;
+      }
+    }
+    
+    return userRoles[taskId] === 'owner';
+  }, [userRoles, loadingRoles, activeTasks, cardIndex, currentUser]);
+  
+  // Check if user can nudge a task with optimistic fallback
+  const canNudgeTask = useCallback((taskId: string) => {
+    // If roles are loading and this is the top card, optimistically allow
+    if (loadingRoles && taskId === activeTasks[cardIndex]?.id) {
+      // Default permissions for top card while loading:
+      // Allow nudge if user did NOT create the task (likely a nudger)
+      const task = activeTasks.find(t => t.id === taskId);
+      if (task && task.creatorId !== currentUser?.id) {
+        return true;
+      }
+    }
+    
+    return userRoles[taskId] === 'nudger';
+  }, [userRoles, loadingRoles, activeTasks, cardIndex, currentUser]);
 
   // Function to handle when a card is swiped left (postponed)
   const handleSwipedLeft = useCallback((index: number) => {
@@ -245,6 +335,16 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const completeSwipe = useCallback(
     async (direction: 'left' | 'right', index: number, gesture: { dx: number, dy: number }) => {
       if (isSwipeAnimating) return;
+      
+      const task = activeTasks[index];
+      
+      // Check permissions for right swipe (complete)
+      if (direction === 'right' && !canCompleteTask(task.id)) {
+        // User is not allowed to complete this task, reset position
+        resetPosition();
+        return;
+      }
+      
       setIsSwipeAnimating(true);
       animatingCardIndex.current = index;
 
@@ -274,7 +374,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       } else {
         handleSwipedRight(index);
       }
-    }, [isSwipeAnimating, position, activeTasks, cardIndex, handleSwipedLeft, handleSwipedRight, animateStackPromotion]);
+    }, [isSwipeAnimating, position, activeTasks, cardIndex, handleSwipedLeft, handleSwipedRight, animateStackPromotion, canCompleteTask]);
 
   // Create pan responder for swipe gestures
   const panResponder = useMemo(() => PanResponder.create({
@@ -287,45 +387,88 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       // Don't capture if we're already animating a swipe
       if (isSwipeAnimating) return false;
       
-      // Capture horizontal movements for card swiping
-      // For upward swipes, make sure we're primarily moving up (negative dy)
-      // and the movement is significant
-      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy * 1.5) ||
-             (gestureState.dy < -5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx));
+      const currentTask = activeTasks[cardIndex];
+      
+      // For upward swipes (nudge), check if user is allowed to nudge
+      if (gestureState.dy < -5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx)) {
+        // Allow nudging if:
+        // 1. User has nudger role, OR
+        // 2. Roles are still loading and user is not the creator (likely a nudger)
+        return !!(onNudge && (
+          canNudgeTask(currentTask.id) || 
+          (loadingRoles && currentTask.creatorId !== currentUser?.id)
+        ));
+      }
+      
+      // For right swipes (complete), check if user is allowed to complete
+      if (gestureState.dx > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)) {
+        // Allow completing if:
+        // 1. User has owner role, OR
+        // 2. Roles are still loading and user is the creator (likely an owner)
+        return !!(
+          canCompleteTask(currentTask.id) || 
+          (loadingRoles && currentTask.creatorId === currentUser?.id)
+        );
+      }
+      
+      // Always allow left swipes for postpone regardless of role
+      return true;
     },
     onPanResponderMove: (_, gesture) => {
       // Don't move the card if we're already animating a swipe
       if (isSwipeAnimating) return;
       
-      // Apply movement constraints to y-axis for better upward swipe behavior
-      // This makes the upward swipe feel more responsive and natural
-      let y = gesture.dy;
+      const currentTask = activeTasks[cardIndex];
       
-      // Make upward movement (negative dy) more pronounced, but dampen it slightly
-      // for more natural feel as card goes higher
-      if (gesture.dy < 0) {
-        // Apply progressive resistance as the card moves further up
-        const dampenFactor = Math.min(1, Math.abs(gesture.dy) / (height * 0.6));
-        y = gesture.dy * (1 - (dampenFactor * 0.3));
-      } else {
-        // Restrict downward movement more
-        y = gesture.dy * 0.4;
+      // For upward movement (nudge)
+      if (gesture.dy < 0 && Math.abs(gesture.dy) > Math.abs(gesture.dx)) {
+        // Allow upward movement if user can nudge or if we're still loading roles for the top card
+        if ((onNudge && canNudgeTask(currentTask.id)) || 
+            (loadingRoles && currentTask.creatorId !== currentUser?.id)) {
+          // Apply movement constraints to y-axis for better upward swipe behavior
+          // Make upward movement more pronounced, but dampen it for more natural feel
+          const dampenFactor = Math.min(1, Math.abs(gesture.dy) / (height * 0.6));
+          const y = gesture.dy * (1 - (dampenFactor * 0.3));
+          position.setValue({ x: gesture.dx, y });
+        }
+      } 
+      // For right movement (complete)
+      else if (gesture.dx > 0 && Math.abs(gesture.dx) > Math.abs(gesture.dy)) {
+        // Allow rightward movement if user can complete or if we're still loading roles for the top card
+        if (canCompleteTask(currentTask.id) || 
+            (loadingRoles && currentTask.creatorId === currentUser?.id)) {
+          position.setValue({ x: gesture.dx, y: gesture.dy });
+        }
       }
-      
-      position.setValue({ x: gesture.dx, y });
+      // Always allow left movement (postpone)
+      else {
+        position.setValue({ x: gesture.dx, y: gesture.dy });
+      }
     },
     onPanResponderRelease: (_, gesture) => {
       // Don't handle release if we're already animating a swipe
       if (isSwipeAnimating) return;
       
-      if (gesture.dx > SWIPE_THRESHOLD) {
-        // Swiped right - complete
+      const currentTask = activeTasks[cardIndex];
+      
+      // Determine if the user can complete using optimistic permissions
+      const canCompleteOptimistic = 
+        canCompleteTask(currentTask.id) || 
+        (loadingRoles && currentTask.creatorId === currentUser?.id);
+        
+      // Determine if the user can nudge using optimistic permissions
+      const canNudgeOptimistic = 
+        (onNudge && canNudgeTask(currentTask.id)) || 
+        (loadingRoles && onNudge && currentTask.creatorId !== currentUser?.id);
+      
+      if (gesture.dx > SWIPE_THRESHOLD && canCompleteOptimistic) {
+        // Swiped right - complete (only if user is allowed)
         completeSwipe('right', cardIndex, gesture);
       } else if (gesture.dx < -SWIPE_THRESHOLD) {
-        // Swiped left - postpone
+        // Swiped left - postpone (anyone can postpone)
         completeSwipe('left', cardIndex, gesture);
-      } else if (gesture.dy < -SWIPE_UP_THRESHOLD && onNudge) {
-        // Swiped up - nudge
+      } else if (gesture.dy < -SWIPE_UP_THRESHOLD && canNudgeOptimistic) {
+        // Swiped up - nudge (only if user is allowed)
         // Prevent interruption of this animation
         setIsSwipeAnimating(true);
         animatingCardIndex.current = cardIndex;
@@ -372,7 +515,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         resetPosition();
       }
     },
-  }), [cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedUp, onNudge, isSwipeAnimating, completeSwipe]);
+  }), [cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedUp, onNudge, isSwipeAnimating, completeSwipe, canCompleteTask, canNudgeTask, activeTasks, loadingRoles, currentUser]);
 
   // Check for postponed tasks in the system
   useEffect(() => {

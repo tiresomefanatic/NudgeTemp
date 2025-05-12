@@ -1,6 +1,8 @@
-import React from "react";
-import { StyleSheet, Text, View, Dimensions, ViewStyle, ScrollView } from "react-native";
-import { Task } from "../../types/task";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, Text, View, Dimensions, ViewStyle, ScrollView, ActivityIndicator } from "react-native";
+import { Task, TaskParticipant } from "../../types/task";
+import { useUser, formatUserName, getUserInitial, User, useCurrentUser } from "@/lib/powersync/userService";
+import { getTaskParticipants } from "@/lib/powersync/taskService";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85; // Adjusted to match screenshot
@@ -12,6 +14,32 @@ interface TaskCardProps {
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
+  const { user: creator, loading: creatorLoading } = useUser(task.creatorId || null);
+  const { user: currentUser } = useCurrentUser();
+  const [participants, setParticipants] = useState<TaskParticipant[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(true);
+
+  // Fetch participants when the task loads
+  useEffect(() => {
+    const fetchParticipants = async () => {
+      if (task.id === 'add') {
+        setLoadingParticipants(false);
+        return;
+      }
+      
+      try {
+        const taskParticipants = await getTaskParticipants(task.id);
+        setParticipants(taskParticipants);
+      } catch (error) {
+        console.error('Error fetching participants:', error);
+      } finally {
+        setLoadingParticipants(false);
+      }
+    };
+
+    fetchParticipants();
+  }, [task.id]);
+  
   // Generate stars for cosmic illustration
   const renderStars = () => {
     const stars = [];
@@ -63,6 +91,123 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
     return trees;
   };
 
+  // Helper function to get initial for avatar
+  const getParticipantInitial = (participant: TaskParticipant | undefined) => {
+    if (!participant || !participant.user) return '?';
+    
+    if (participant.user.first_name) {
+      return participant.user.first_name.charAt(0).toUpperCase();
+    }
+    return participant.user.email.charAt(0).toUpperCase();
+  };
+
+  // Helper function to get participant name
+  const getParticipantName = (participant: TaskParticipant | undefined) => {
+    if (!participant || !participant.user) return 'Unknown';
+    
+    if (participant.user.first_name && participant.user.last_name) {
+      return `${participant.user.first_name} ${participant.user.last_name}`;
+    }
+    
+    if (participant.user.first_name) {
+      return participant.user.first_name;
+    }
+    
+    return participant.user.email.split('@')[0];
+  };
+
+  // Render collaborator avatars
+  const renderCollaboratorAvatars = () => {
+    if (loadingParticipants) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#3b82f6" />
+        </View>
+      );
+    }
+
+    if (participants.length === 0) {
+      return (
+        <View style={styles.avatarStack}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {getUserInitial(creator)}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Show at most 2 avatars stacked
+    return (
+      <View style={styles.avatarStack}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{getUserInitial(creator)}</Text>
+        </View>
+        {participants.length > 0 && (
+          <View style={styles.greenAvatarStacked}>
+            <Text style={styles.greenAvatarText}>
+              {getParticipantInitial(participants[0])}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Format collaborator names text
+  const getCollaboratorText = () => {
+    if (loadingParticipants) {
+      return "Loading collaborators...";
+    }
+    
+    // Early return if no creator
+    if (!creator) {
+      return "Unknown";
+    }
+    
+    // Format the creator name properly
+    const creatorName = formatUserName(creator);
+    const currentUserId = currentUser?.id;
+    const isCurrentUserCreator = currentUserId === creator.id;
+    
+    // No participants case - just show creator
+    if (participants.length === 0) {
+      return creatorName;
+    }
+    
+    // Find participants excluding the creator (who might also be in participants list)
+    const otherParticipants = participants.filter(p => 
+      p.user_id !== creator.id
+    );
+    
+    // If no other participants, only show creator
+    if (otherParticipants.length === 0) {
+      return creatorName;
+    }
+    
+    // Get formatted names of other participants
+    const otherParticipantNames = otherParticipants
+      .map(p => {
+        // Check if this participant is the current user
+        const isCurrentUser = p.user_id === currentUserId;
+        // Get a proper name, but ensure we're not duplicating "you" labels
+        const name = getParticipantName(p);
+        return isCurrentUser ? `you` : name;
+      })
+      .filter(Boolean) // Remove any null/undefined
+      .filter((name, index, self) => self.indexOf(name) === index); // Remove duplicates
+    
+    // Join all names with commas, ensuring proper "you" placement
+    if (isCurrentUserCreator) {
+      // Current user is creator, so name already includes "you"
+      return `${creatorName} (you)${otherParticipantNames.length > 0 ? `, ${otherParticipantNames.join(', ')}` : ''}`;
+    } else {
+      // Current user is not creator
+      return `${creatorName}${otherParticipantNames.length > 0 ? `, ${otherParticipantNames.join(', ')}` : ''}`;
+    }
+  };
+
   return (
     <View style={[styles.card, style]}>
       <View style={styles.fixedHeader}>
@@ -104,10 +249,12 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
           </Text>
         </View>
 
-        {/* Owner pill */}
+        {/* Owner pill - show actual creator */}
         <View style={styles.ownerPillRow}>
           <View style={styles.ownerPill}>
-            <Text style={styles.ownerPillText}>Alice</Text>
+            <Text style={styles.ownerPillText}>
+              {creatorLoading ? 'Loading...' : formatUserName(creator)}
+            </Text>
           </View>
         </View>
 
@@ -125,16 +272,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
         {/* Collaborators section */}
         <Text style={styles.collaboratorsSectionHeader}>COLLABORATORS</Text>
         <View style={styles.collaboratorsRow}>
-          <View style={styles.avatarStack}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>A</Text>
-            </View>
-            <View style={styles.greenAvatarStacked}>
-              <Text style={styles.greenAvatarText}>$</Text>
-            </View>
-          </View>
+          {renderCollaboratorAvatars()}
           <Text style={styles.collaboratorNamesText}>
-            Alice, <Text style={styles.italicText}>you</Text>
+            {getCollaboratorText()}
           </Text>
         </View>
 
@@ -247,7 +387,6 @@ const styles = StyleSheet.create({
     left: 20,
     opacity: 0.6,
   },
-  // Text-like scribbles for forest
   textScribble1: {
     position: "absolute",
     width: 20,
@@ -284,104 +423,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 32,
     letterSpacing: -0.25,
-  },
-  avatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#3b82f6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  ownerName: {
-    fontSize: 18,
-    color: "#555",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#e0e0e0",
-    marginHorizontal: 20,
-    marginBottom: 12,
-  },
-  sectionHeader: {
-    fontSize: 14,
-    color: "#888",
-    fontWeight: "600",
-    letterSpacing: 1,
-    marginHorizontal: 20,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  detailsText: {
-    fontSize: 16,
-    color: "#444",
-    marginHorizontal: 20,
-    marginBottom: 12,
-    lineHeight: 22,
-  },
-  collaboratorsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 20,
-    marginBottom: 12,
-  },
-  greenAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#22c55e",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  greenAvatarText: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  collaboratorText: {
-    fontSize: 16,
-    color: "#555",
-    marginLeft: 10,
-  },
-  italicText: {
-    fontStyle: "italic",
-  },
-  nudgeContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 15,
-  },
-  nudgePill: {
-    backgroundColor: "#fef08a",
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-  },
-  nudgeText: {
-    color: "#92400e",
-    fontSize: 14,
-    marginRight: 8,
-  },
-  smallGreenAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#22c55e",
-    alignItems: "center",
-    justifyContent: "center",
   },
   ownerPillRow: {
     display: 'flex',
@@ -444,15 +485,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 4,
   },
-  collaboratorNamesText: {
-    color: '#B2B5BD',
-    fontFamily: 'Be Vietnam',
-    fontSize: 14,
-    fontStyle: 'normal',
-    fontWeight: '700',
-    lineHeight: 16,
-    letterSpacing: 0,
-    marginLeft: 10,
+  collaboratorsRow: {
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 24,
   },
   avatarStack: {
     flexDirection: 'row',
@@ -461,6 +498,22 @@ const styles = StyleSheet.create({
     width: 44, // enough to show overlap
     height: 36,
     marginRight: 4,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#3b82f6",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "absolute",
+    top: 0,
+    left: 0,
+  },
+  avatarText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
   },
   greenAvatarStacked: {
     width: 36,
@@ -472,6 +525,30 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 20, // overlap amount
     zIndex: 1,
+  },
+  greenAvatarText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  collaboratorNamesText: {
+    color: '#B2B5BD',
+    fontFamily: 'Be Vietnam',
+    fontSize: 14,
+    fontStyle: 'normal',
+    fontWeight: '700',
+    lineHeight: 16,
+    letterSpacing: 0,
+    marginLeft: 10,
+  },
+  italicText: {
+    fontStyle: "italic",
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 36,
+    height: 36,
   },
 });
 
