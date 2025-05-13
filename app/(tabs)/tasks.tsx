@@ -36,6 +36,7 @@ import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
 import { usePowerSyncApp } from "@/lib/powersync/provider";
 import AddTaskCard from "@/components/tasks/AddTaskCard";
 import { useAuth } from "@/lib/auth/AuthContext";
+import DrawerMenu from "@/components/ui/DrawerMenu";
 
 export default function TasksScreen() {
   // Use PowerSync hooks to get tasks
@@ -44,6 +45,9 @@ export default function TasksScreen() {
   const headerHeight = useHeaderHeight();
   const [isClearing, setIsClearing] = useState(false);
   const { signOut } = useAuth();
+  
+  // Add drawer state
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Remove modal state, add inline card state
   const [showAddCard, setShowAddCard] = useState(false);
@@ -62,6 +66,12 @@ export default function TasksScreen() {
       console.error("Error logging out:", error);
       Alert.alert("Error", "Failed to log out. Please try again.");
     }
+  };
+
+  // Toggle drawer
+  const toggleDrawer = () => {
+    Haptics.selectionAsync();
+    setDrawerVisible(!drawerVisible);
   };
 
   const handleCompleteTask = async (task: Task) => {
@@ -239,10 +249,13 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
 
+      {/* Drawer Menu */}
+      <DrawerMenu visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+
       {/* Header inside SafeAreaView */}
       <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
         <View style={styles.customHeader}>
-          <TouchableOpacity style={styles.headerIconLeft} onPress={navigateToLaterStack}>
+          <TouchableOpacity style={styles.headerIconLeft} onPress={toggleDrawer}>
             <Image
               source={require("@/assets/icons/hamburger.png")}
               style={{ width: 32, height: 32 }}
@@ -253,9 +266,6 @@ export default function TasksScreen() {
             <Text style={styles.nudgeTitle}>nudge</Text>
           </View>
           <View style={styles.headerIconsRight}>
-            <TouchableOpacity>
-              <Image source={require("@/assets/icons/calendar.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
-            </TouchableOpacity>
             <TouchableOpacity onPress={navigateToNotifications}>
               <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
             </TouchableOpacity>
