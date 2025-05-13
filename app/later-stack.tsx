@@ -18,10 +18,11 @@ import { router, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import LaterStackTaskCard from "@/components/tasks/LaterStackTaskCard";
-import { useAllTasks, unpostponeTask } from "@/lib/powersync/taskService";
+import { useAllTasks, unpostponeTask, batchGetTaskParticipants, getTaskParticipants } from "@/lib/powersync/taskService";
 import { Ionicons } from "@expo/vector-icons";
-import { Task } from "@/types/task";
+import { Task, TaskParticipant } from "@/types/task";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useUser, formatUserName, getUserInitial } from "@/lib/powersync/userService";
 
 const { width } = Dimensions.get("window");
 // Constants for swipe - commented out as per requirements
@@ -30,15 +31,34 @@ const { width } = Dimensions.get("window");
 
 export default function LaterStackScreen() {
   const { session } = useAuth();
+  const { tasks: allTasks, loading } = useAllTasks();
+  const [participantsMap, setParticipantsMap] = useState<Record<string, TaskParticipant[]>>({});
+  const [loadingParticipants, setLoadingParticipants] = useState(true);
   
   // Redirect to auth if not logged in
   if (!session) {
     return <Redirect href="/(auth)" />;
   }
 
-  const { tasks: allTasks, loading } = useAllTasks();
-  // Commented out swipingItemId state as per requirements
-  // const [swipingItemId, setSwipingItemId] = useState<string | null>(null);
+  // Load participants for all tasks
+  useEffect(() => {
+    if (!allTasks.length) return;
+    
+    const fetchParticipants = async () => {
+      try {
+        setLoadingParticipants(true);
+        const taskIds = allTasks.map(task => task.id);
+        const participants = await batchGetTaskParticipants(taskIds);
+        setParticipantsMap(participants);
+      } catch (error) {
+        console.error('Error fetching participants:', error);
+      } finally {
+        setLoadingParticipants(false);
+      }
+    };
+    
+    fetchParticipants();
+  }, [allTasks]);
   
   // Function to navigate back to the tasks screen
   const navigateBack = () => {
@@ -70,68 +90,57 @@ export default function LaterStackScreen() {
     }
   };
   
-  // Create swipe handler for a specific task - Commented out as per requirements
-  /*
-  const createSwipeHandler = (task: Task) => {
-    // Animation values
-    const position = new Animated.ValueXY();
-    const opacity = new Animated.Value(1);
+  // Helper function to get participant initials
+  const getParticipantInitials = (task: Task): string[] => {
+    if (loadingParticipants) return [];
     
-    // Create pan responder for this task
-    const panResponder = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 5;
-      },
-      onPanResponderGrant: () => {
-        setSwipingItemId(task.id);
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        // Only allow right-to-left swipe (negative dx)
-        if (gestureState.dx < 0) {
-          position.setValue({ x: gestureState.dx, y: 0 });
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx < -SWIPE_THRESHOLD) {
-          // Swipe left - move to main tasks
-          Animated.parallel([
-            Animated.timing(position, {
-              toValue: { x: -width, y: 0 },
-              duration: 300,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: true,
-            })
-          ]).start(async () => {
-            // Move task back to main tasks
-            await handleMoveToMainTasks(task.id);
-            setSwipingItemId(null);
-            
-            // Reset the animation values after a delay to avoid visual glitches
-            setTimeout(() => {
-              position.setValue({ x: 0, y: 0 });
-              opacity.setValue(1);
-            }, 100);
-          });
-        } else {
-          // Return to original position
-          Animated.spring(position, {
-            toValue: { x: 0, y: 0 },
-            friction: 5,
-            tension: 40,
-            useNativeDriver: true,
-          }).start(() => setSwipingItemId(null));
-        }
+    const participants = participantsMap[task.id] || [];
+    
+    // Extract the first letter from participant names
+    return participants.map(participant => {
+      if (participant.user?.first_name) {
+        return participant.user.first_name.charAt(0).toUpperCase();
       }
+      return participant.user?.email?.charAt(0).toUpperCase() || '?';
     });
-    
-    return { position, opacity, panResponder };
   };
-  */
+  
+  // Helper function to get creator's name
+  const getCreatorName = (task: Task): string => {
+    if (!task.creatorId) return "Unknown";
+    
+    // Look for creator in participants
+    const participants = participantsMap[task.id] || [];
+    const creatorParticipant = participants.find(p => p.user_id === task.creatorId);
+    
+    if (creatorParticipant?.user) {
+      // Format user name directly without using formatUserName to avoid type errors
+      const user = creatorParticipant.user;
+      if (user.first_name && user.last_name) {
+        return `${user.first_name} ${user.last_name}`;
+      } else if (user.first_name) {
+        return user.first_name;
+      } else if (user.email) {
+        return user.email.split('@')[0];
+      }
+    }
+    
+    return "Owner";
+  };
+
+  // Helper function to get owner's initial
+  const getOwnerInitial = (task: Task): string => {
+    if (!task.creatorId) return "?";
+    const participants = participantsMap[task.id] || [];
+    const creatorParticipant = participants.find(p => p.user_id === task.creatorId);
+    if (creatorParticipant?.user?.first_name) {
+      return creatorParticipant.user.first_name.charAt(0).toUpperCase();
+    }
+    if (creatorParticipant?.user?.email) {
+      return creatorParticipant.user.email.charAt(0).toUpperCase();
+    }
+    return "?";
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -162,7 +171,7 @@ export default function LaterStackScreen() {
 
       {/* Content container with task cards */}
       <View style={styles.contentContainer}>
-        {loading ? (
+        {loading || loadingParticipants ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0066ff" />
             <Text style={styles.loadingText}>Loading all tasks...</Text>
@@ -179,30 +188,20 @@ export default function LaterStackScreen() {
             showsVerticalScrollIndicator={false}
           >
             {allTasks.map(task => {
-              // Removed swipe handler for this task as per requirements
-              // const { position, opacity, panResponder } = createSwipeHandler(task);
-              
               return (
                 <View
                   key={task.id}
                   style={styles.taskContainer}
                 >
-                  {/* Return to main tasks indicator - Removed as per requirements */}
-                  {/* {swipingItemId === task.id && (
-                    <View style={styles.actionIndicator}>
-                      <Ionicons name="arrow-back" size={20} color="#39C7A5" />
-                      <Text style={styles.actionText}>Move to main tasks</Text>
-                    </View>
-                  )} */}
-                  
                   <LaterStackTaskCard
                     title={task.title}
-                    userName={task.id.startsWith('a') ? 'Alice' : 'Sam'} // Mock user name based on ID for demo
+                    userName={getCreatorName(task)}
                     date={new Date(task.postponedAt || task.createdAt || new Date().toISOString()).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}
-                    participants={['A', 'S']} // Mock participants for demo
+                    participants={getParticipantInitials(task)}
+                    ownerInitial={getOwnerInitial(task)}
                     taskId={task.id} 
                   />
                 </View>

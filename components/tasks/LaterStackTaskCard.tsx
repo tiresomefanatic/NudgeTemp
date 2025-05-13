@@ -9,6 +9,7 @@ interface LaterStackTaskCardProps {
   participants: string[];
   style?: ViewStyle;
   taskId?: string;
+  ownerInitial: string;
 }
 
 const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({ 
@@ -17,7 +18,8 @@ const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({
   date, 
   participants,
   style,
-  taskId = "task-id"
+  taskId = "task-id",
+  ownerInitial
 }) => {
   const navigateToNotes = () => {
     router.push({
@@ -30,7 +32,7 @@ const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({
     <View style={[styles.card, style]}>
       {/* Left Avatar */}
       <View style={styles.avatar}>
-        <Text style={styles.avatarText}>A</Text>
+        <Text style={styles.avatarText}>{ownerInitial}</Text>
       </View>
       
       {/* Content */}
@@ -61,23 +63,28 @@ const LaterStackTaskCard: React.FC<LaterStackTaskCardProps> = ({
             <Text style={styles.infoText}>{date}</Text>
           </View>
           
-          {/* Dot separator */}
-          <Text style={styles.dot}>•</Text>
-          
-          {/* Participants */}
-          <View style={styles.participantsContainer}>
-            {participants.map((initial, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.participantBadge,
-                  index > 0 ? { marginLeft: -10 } : null
-                ]}
-              >
-                <Text style={styles.participantText}>{initial}</Text>
+          {/* Only show dot separator and participants if there are participants */}
+          {participants.length > 0 && (
+            <>
+              {/* Dot separator */}
+              <Text style={styles.dot}>•</Text>
+              
+              {/* Participants */}
+              <View style={styles.participantsContainer}>
+                {participants.map((initial, index) => (
+                  <View 
+                    key={index} 
+                    style={[
+                      styles.participantBadge,
+                      index > 0 ? { marginLeft: -10 } : null
+                    ]}
+                  >
+                    <Text style={styles.participantText}>{initial}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </>
+          )}
         </View>
       </View>
       
