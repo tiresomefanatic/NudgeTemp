@@ -165,26 +165,13 @@ const NotificationCard = ({ notification, onDismiss, onDone }: NotificationCardP
       {...panResponder.panHandlers}
     >
       <View style={styles.notificationContent}>
-        <Text style={styles.notificationText}>
+        <Text style={styles.notificationTextTitle}>
           <Text>{notification.user} </Text>
           <Text>{notification.action} </Text>
           <Text>{notification.content}</Text>
         </Text>
-        <View style={styles.notificationFooter}>
+        <View style={styles.notificationFooterOnlyTime}>
           <Text style={styles.timeText}>{notification.time}</Text>
-          <View style={styles.notificationActions}>
-            <TouchableOpacity style={styles.dismissButton} onPress={() => onDismiss(notification.id)}>
-              <Text style={styles.dismissButtonX}>×</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.doneButton} onPress={() => onDone(notification.id)}>
-              <Text style={styles.doneButtonText}>Done</Text>
-              <Image 
-                source={require("@/assets/icons/Check.png")} 
-                style={styles.checkIcon} 
-                resizeMode="contain" 
-              />
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Animated.View>
@@ -346,7 +333,7 @@ export default function NotificationsScreen() {
             <View style={styles.olderHeader}>
               <Text style={styles.olderTitle}>OLDER</Text>
               <TouchableOpacity onPress={handleClearAll}>
-                <Text style={styles.clearAllText}>Clear all</Text>
+                <Text style={styles.clearAllTextCustom}>Clear all</Text>
               </TouchableOpacity>
             </View>
             
@@ -363,6 +350,7 @@ export default function NotificationsScreen() {
                     key={notification.id}
                     style={[
                       styles.stackedCard,
+                      styles.stackedCardCustom,
                       {
                         zIndex: 3 - index,
                         top: topOffset,
@@ -392,7 +380,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F4F4F6',
   },
   safeHeader: {
     backgroundColor: '#fff',
@@ -457,75 +445,28 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 12,
   },
-  notificationText: {
-    color: '#5E626E',
-    fontFamily: 'Pally',
+  notificationTextTitle: {
+    color: '#393B42',
     fontSize: 14,
-    fontWeight: '400',
+    fontStyle: 'normal',
+    fontWeight: '300',
     lineHeight: 20,
     letterSpacing: 0,
   },
-  notificationFooter: {
+  notificationFooterOnlyTime: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
   },
   timeText: {
-    color: '#B2B5BD',
+    color: '#717683',
     fontFamily: 'Sharpie',
     fontSize: 10,
+    fontStyle: 'normal',
     fontWeight: '300',
     lineHeight: 14,
     letterSpacing: 0,
-  },
-  notificationActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dismissButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#F25D4F',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dismissButtonX: {
-    fontSize: 18,
-    color: '#F25D4F',
-  },
-  doneButton: {
-    flexDirection: 'row',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 8,
-    backgroundColor: '#1249D3',
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  doneButtonText: {
-    color: '#FFF',
-    fontFamily: 'Pally',
-    fontSize: 14,
-    fontWeight: '400',
-    lineHeight: 20,
-    letterSpacing: 0,
-  },
-  checkIcon: {
-    width: 20,
-    height: 20,
   },
   olderSection: {
     marginTop: 24,
@@ -544,11 +485,11 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 0.15,
   },
-  clearAllText: {
-    color: '#5E626E',
-    fontFamily: 'Pally',
+  clearAllTextCustom: {
+    color: '#393B42',
     fontSize: 14,
-    fontWeight: '400',
+    fontStyle: 'normal',
+    fontWeight: '300',
     lineHeight: 20,
     letterSpacing: 0,
   },
@@ -560,6 +501,9 @@ const styles = StyleSheet.create({
   stackedCard: {
     position: 'absolute',
     width: '100%',
+  },
+  stackedCardCustom: {
+
   },
   // Dismiss Popup Styles
   modalOverlay: {
