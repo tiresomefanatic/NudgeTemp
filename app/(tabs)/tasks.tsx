@@ -197,22 +197,32 @@ export default function TasksScreen() {
   // New handler for AddTaskCard
   const handleCreateTask = async () => {
     if (!addTitle.trim()) return;
+    
+    // Store task data before clearing the form
+    const taskData = {
+      title: addTitle,
+      description: addDetails,
+      priority: "medium" as "medium" | "low" | "high",
+      createdAt: new Date().toISOString(),
+      isCompleted: false,
+      isPostponed: false,
+      postponedCount: 0,
+    };
+    const taskContributorIds = [...contributorIds];
+    
+    // Immediately navigate away for better UX
+    setShowAddCard(false);
+    setAddTitle("");
+    setAddDetails("");
+    setContributorIds([]);
+    
+    // Trigger haptic feedback for immediate response
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
+    // Perform the API call in the background
     setIsSaving(true);
     try {
-      await createTask({
-        title: addTitle,
-        description: addDetails,
-        priority: "medium",
-        createdAt: new Date().toISOString(),
-        isCompleted: false,
-        isPostponed: false,
-        postponedCount: 0,
-      }, contributorIds);
-      setShowAddCard(false);
-      setAddTitle("");
-      setAddDetails("");
-      setContributorIds([]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await createTask(taskData, taskContributorIds);
     } catch (error) {
       Alert.alert("Error", "Failed to create task. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

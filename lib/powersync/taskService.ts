@@ -321,6 +321,81 @@ export const addTaskParticipant = async (taskId: string, userId: number, role: '
   }
 };
 
+// Batch fetch participants for multiple tasks at once
+export const batchGetTaskParticipants = async (taskIds: string[]): Promise<Record<string, TaskParticipant[]>> => {
+  try {
+    if (!taskIds.length) return {};
+    
+    console.log(`Fetching participants for ${taskIds.length} tasks in batch`);
+    
+    // Filter out 'add' task if present
+    const validTaskIds = taskIds.filter(id => id !== 'add');
+    if (!validTaskIds.length) return {};
+    
+    // Get all participants for the provided task IDs in a single query
+    const { data, error } = await supabase
+      .from('participants')
+      .select(`
+        id,
+        role,
+        user_id,
+        task_id,
+        joined_at,
+        users:user_id (
+          id,
+          first_name,
+          last_name,
+          email,
+          created_at
+        )
+      `)
+      .in('task_id', validTaskIds);
+    
+    if (error) {
+      console.error('Error batch fetching task participants:', error);
+      return {};
+    }
+    
+    // Group participants by task_id
+    const participantsByTaskId: Record<string, TaskParticipant[]> = {};
+    
+    // Initialize empty arrays for all task ids
+    validTaskIds.forEach(id => {
+      participantsByTaskId[id] = [];
+    });
+    
+    // Map and organize participants
+    data.forEach(item => {
+      const userData = item.users && (
+        Array.isArray(item.users) 
+          ? (item.users.length > 0 ? item.users[0] : null) 
+          : item.users
+      );
+      
+      const participant = {
+        id: item.id,
+        task_id: item.task_id,
+        user_id: item.user_id,
+        role: item.role,
+        joined_at: item.joined_at,
+        user: userData
+      };
+      
+      if (participantsByTaskId[item.task_id]) {
+        participantsByTaskId[item.task_id].push(participant);
+      } else {
+        participantsByTaskId[item.task_id] = [participant];
+      }
+    });
+    
+    console.log(`Successfully fetched participants for ${Object.keys(participantsByTaskId).length} tasks`);
+    return participantsByTaskId;
+  } catch (error) {
+    console.error('Error in batchGetTaskParticipants:', error);
+    return {};
+  }
+};
+
 // Remove a participant from a task
 export const removeTaskParticipant = async (participantId: number) => {
   try {
@@ -463,13 +538,18 @@ const fetchTasksWithParticipants = async () => {
 };
 
 // Function to fetch participant tasks and sync them to PowerSync
-const fetchParticipantTasks = async () => {
+const fetchParticipantTasks = async (background: boolean = false) => {
   try {
     // Get current user
     const currentUser = await getCurrentUser();
     if (!currentUser) {
       console.log("No logged in user found for tasks");
       return;
+    }
+    
+    // Only log when not in background mode to reduce console noise
+    if (!background) {
+      console.log("Fetching participant tasks...");
     }
     
     // Ensure creator_id is properly typed as number for database queries
@@ -819,18 +899,19 @@ export const useTasks = () => {
     let unsubscribe: () => void;
     let isMounted = true;
     
-    // Set up a periodic refresh for tasks
+    // Set up a periodic refresh for tasks - reduced frequency to avoid excessive refreshes
     const refreshIntervalId = setInterval(() => {
       if (isMounted) {
-        console.log("⏰ Periodic task refresh triggered");
-        fetchParticipantTasks();
+        console.log("⏰ Background task refresh triggered");
+        // Run in the background without setting loading state to true
+        fetchParticipantTasks(true);
       }
-    }, 10000); // Refresh every 10 seconds
+    }, 30000); // Reduced to once every 30 seconds instead of 10 seconds
     
     const initTasks = async () => {
       try {
         // First fetch tasks including ones where the user is a participant from Supabase
-        await fetchParticipantTasks();
+        await fetchParticipantTasks(false);
         
         // Then set up a watcher for the PowerSync database using the iterator pattern
         const watcher = powersync.watch(activeTasksQuery);
@@ -1264,7 +1345,11 @@ export const debugTaskParticipants = async (taskId: string): Promise<void> => {
     
     console.log(`Found ${participants.length} participants:`);
     participants.forEach((p, i) => {
-      console.log(`  ${i+1}. Participant ID: ${p.id}, Role: ${p.role}, User: ${p.users?.first_name} ${p.users?.last_name} (ID: ${p.user_id})`);
+      // Handle nested user object safely with optional chaining and type checking
+      const userData = p.users && typeof p.users === 'object' ? p.users : null;
+      const firstName = userData && 'first_name' in userData ? userData.first_name : 'Unknown';
+      const lastName = userData && 'last_name' in userData ? userData.last_name : '';
+      console.log(`  ${i+1}. Participant ID: ${p.id}, Role: ${p.role}, User: ${firstName} ${lastName} (ID: ${p.user_id})`);
     });
     
     // 3. Get the current user and their role

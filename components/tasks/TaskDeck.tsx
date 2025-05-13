@@ -23,7 +23,7 @@ import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
 import { powersync } from "@/lib/powersync/database";
 import AddTaskCard from "./AddTaskCard";
-import { getCurrentUserRoleForTask } from "@/lib/powersync/taskService";
+import { getCurrentUserRoleForTask, batchGetTaskParticipants, getTaskParticipants } from "@/lib/powersync/taskService";
 import { useCurrentUser } from "@/lib/powersync/userService";
 
 const { width, height } = Dimensions.get("window");
@@ -69,6 +69,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   // User role tracking for each task
   const [userRoles, setUserRoles] = useState<Record<string, 'owner' | 'nudger' | null>>({});
   const [loadingRoles, setLoadingRoles] = useState(true);
+  // Store participants data for all tasks
+  const [participantsMap, setParticipantsMap] = useState<Record<string, any[]>>({});
+  const [loadingParticipants, setLoadingParticipants] = useState(true);
+  // Add a separate flag for initial loading vs. background refreshing
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { user: currentUser } = useCurrentUser();
   
   // Animation values for the card
@@ -119,6 +124,49 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const thirdCardTranslateY = useRef(new Animated.Value(-36)).current;
   const [isPromotingCards, setIsPromotingCards] = useState(false);
 
+  // Batch fetch participants for all tasks
+  const fetchParticipantsForAllTasks = useCallback(async (tasks: Task[], isRefresh = false) => {
+    if (!tasks.length) return;
+    
+    if (!isRefresh) {
+      console.log("🔄 Initial loading of participants started");
+      setLoadingParticipants(true);
+    } else {
+      console.log("🔄 Background refresh of participants started");
+    }
+    
+    try {
+      // First prioritize loading the top card's participants for immediate display
+      if (tasks[0] && tasks[0].id !== 'add') {
+        const topTaskParticipants = await getTaskParticipants(tasks[0].id);
+        setParticipantsMap(current => ({
+          ...current,
+          [tasks[0].id]: topTaskParticipants
+        }));
+      }
+      
+      // Then load all other tasks' participants in the background
+      const taskIds = tasks.slice(1).map(task => task.id);
+      if (taskIds.length > 0) {
+        const participantsData = await batchGetTaskParticipants(taskIds);
+        setParticipantsMap(current => ({
+          ...current,
+          ...participantsData
+        }));
+      }
+    } catch (error) {
+      console.error('Error prefetching participants:', error);
+    } finally {
+      setLoadingParticipants(false);
+      if (!isRefresh) {
+        console.log("🔄 Initial loading of participants completed");
+        setIsInitialLoad(false);
+      } else {
+        console.log("🔄 Background refresh of participants completed");
+      }
+    }
+  }, []);
+
   // Initialize the deck when we receive initialTasks
   useEffect(() => {
     if (initialTasks && initialTasks.length > 0) {
@@ -149,10 +197,15 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         setUserRoles(tempRoles);
       }
       
-      // Then fetch accurate roles for all tasks
-      fetchUserRolesForTasks(initialTasks);
+      // Fetch user roles and participants data concurrently
+      // Use isInitialLoad state to determine if this is the first load
+      const refreshing = !isInitialLoad;
+      Promise.all([
+        fetchUserRolesForTasks(initialTasks),
+        fetchParticipantsForAllTasks(initialTasks, refreshing)
+      ]);
     }
-  }, [initialTasks, currentUser]);
+  }, [initialTasks, currentUser, fetchParticipantsForAllTasks, isInitialLoad]);
   
   // Function to fetch user roles for all tasks
   const fetchUserRolesForTasks = useCallback(async (tasks: Task[]) => {
@@ -238,7 +291,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     });
     
     // Update the current index to show the next task
-    setCardIndex(prevIndex => prevIndex + 1);
+    setCardIndex(prevIndex => {
+      const newIndex = prevIndex + 1;
+      
+      // Log to confirm we're showing the right data for the next card
+      const nextTaskId = activeTasks[newIndex]?.id;
+      if (nextTaskId && nextTaskId !== 'add') {
+        console.log(`Next card will be task ${nextTaskId} - using prefetched data`);
+      }
+      
+      return newIndex;
+    });
     
     // Reset animation states after all state updates
     setIsSwipeAnimating(false);
@@ -251,25 +314,50 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     onComplete(activeTasks[index]);
     
     // Update the current index to show the next task
-    setCardIndex(prevIndex => prevIndex + 1);
+    setCardIndex(prevIndex => {
+      const newIndex = prevIndex + 1;
+      
+      // Log to confirm we're showing the right data for the next card
+      const nextTaskId = activeTasks[newIndex]?.id;
+      if (nextTaskId && nextTaskId !== 'add') {
+        console.log(`Next card will be task ${nextTaskId} - using prefetched data`);
+      }
+      
+      return newIndex;
+    });
     
     // Reset animation states after all state updates
     setIsSwipeAnimating(false);
     animatingCardIndex.current = -1;
   }, [activeTasks, onComplete]);
 
-  // Function to handle when a card is swiped upward (nudged)
+  // Function to handle when a card is swiped up (nudge)
   const handleSwipedUp = useCallback((index: number) => {
+    // Check if the onNudge callback exists before calling it
     if (!onNudge) return;
     
     const taskToNudge = activeTasks[index];
     
+    // Nudge the task
     onNudge(taskToNudge);
     
-    // Reset animation states
+    // Update the current index to show the next task
+    setCardIndex(prevIndex => {
+      const newIndex = prevIndex + 1;
+      
+      // Log to confirm we're showing the right data for the next card
+      const nextTaskId = activeTasks[newIndex]?.id;
+      if (nextTaskId && nextTaskId !== 'add') {
+        console.log(`Next card will be task ${nextTaskId} - using prefetched data`);
+      }
+      
+      return newIndex;
+    });
+    
+    // Reset animation states after all state updates
     setIsSwipeAnimating(false);
     animatingCardIndex.current = -1;
-
+    
     // Return to center position smoothly
     Animated.spring(position, {
       toValue: { x: 0, y: 0 },
@@ -602,6 +690,9 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           const isThirdCard = idx === 2;
           const cardScale = 1 - (idx * 0.03);
           const shouldApplyPanResponder = isTopCard && task.id !== "add" && !isSwipeAnimating;
+          
+          // Get prefetched participants for this task
+          const taskParticipants = task.id !== 'add' ? participantsMap[task.id] || [] : [];
 
           // Animation styles for each card position
           let animatedStyle = {};
@@ -639,7 +730,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           if (isTopCard) {
             return (
               <Animated.View
-                key={`${task.id}-${cardIndex}`}
+                key={`${task.id}`}
                 style={[
                   styles.cardStyle,
                   cardStyle,
@@ -659,7 +750,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                   {task.id === "add" ? (
                     <AddTaskCard {...addTaskCardProps} />
                   ) : (
-                    <TaskCard task={task} style={styles.centerCard} />
+                    <TaskCard 
+                      task={task} 
+                      style={styles.centerCard} 
+                      prefetchedParticipants={taskParticipants}
+                    />
                   )}
                 </View>
                 {/* Overlays only for swipable cards */}
@@ -714,13 +809,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           if ((isSecondCard || isThirdCard) && isPromotingCards) {
             return (
               <Animated.View
-                key={`${task.id}-${cardIndex}-${idx}`}
+                key={`${task.id}`}
                 style={[styles.cardStyle, cardStyle]}
               >
                 {task.id === "add" ? (
                   <AddTaskCard {...addTaskCardProps} />
                 ) : (
-                  <TaskCard task={task} style={styles.centerCard} />
+                  <TaskCard 
+                    task={task} 
+                    style={styles.centerCard}
+                    prefetchedParticipants={taskParticipants}
+                  />
                 )}
               </Animated.View>
             );
@@ -729,13 +828,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           // For all other cards
           return (
             <Animated.View
-              key={`${task.id}-${cardIndex}-${idx}`}
+              key={`${task.id}`}
               style={[styles.cardStyle, cardStyle]}
             >
               {task.id === "add" ? (
                 <AddTaskCard {...addTaskCardProps} />
               ) : (
-                <TaskCard task={task} style={styles.centerCard} />
+                <TaskCard 
+                  task={task} 
+                  style={styles.centerCard}
+                  prefetchedParticipants={taskParticipants} 
+                />
               )}
             </Animated.View>
           );
@@ -753,7 +856,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   return (
     <View style={styles.container}>
-      {!isListMode ? (
+      {/* Display a loading indicator only during initial load */}
+      {isInitialLoad && loadingParticipants && activeTasks.length > 0 && cardIndex === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3800FF" />
+          <Text style={styles.loadingText}>Loading your tasks...</Text>
+        </View>
+      ) : !isListMode ? (
         <View style={styles.deckTouchable}>
           {renderStackCards()}
         </View>
@@ -785,26 +894,34 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
             contentContainerStyle={styles.scrollViewContent}
             showsVerticalScrollIndicator={true}
           >
-            {allTasks.map((task: Task, index: number) => (
-              <Animated.View
-                key={task.id}
-                style={[
-                  styles.listItemContainer,
-                  {
-                    transform: [
-                      {
-                        scale: listAnimationValue.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.8, 1],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <TaskCard task={task} />
-              </Animated.View>
-            ))}
+            {allTasks.map((task: Task, index: number) => {
+              // Get prefetched participants for this task
+              const taskParticipants = task.id !== 'add' ? participantsMap[task.id] || [] : [];
+              
+              return (
+                <Animated.View
+                  key={task.id}
+                  style={[
+                    styles.listItemContainer,
+                    {
+                      transform: [
+                        {
+                          scale: listAnimationValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.8, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <TaskCard 
+                    task={task} 
+                    prefetchedParticipants={taskParticipants}
+                  />
+                </Animated.View>
+              );
+            })}
           </Animated.ScrollView>
         </View>
       )}
@@ -994,6 +1111,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 36,
     letterSpacing: 0.15,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  loadingText: {
+    color: "#333",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 10,
   },
 });
 
