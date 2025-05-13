@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -18,9 +18,11 @@ import {
   Keyboard,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from "@/lib/auth/AuthContext";
+import { Redirect } from "expo-router";
 
 const { width } = Dimensions.get("window");
 
@@ -190,6 +192,14 @@ const NotificationCard = ({ notification, onDismiss, onDone }: NotificationCardP
 };
 
 export default function NotificationsScreen() {
+  const { session } = useAuth();
+  const navigation = useNavigation();
+  
+  // Redirect to auth if not logged in
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
+  
   const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
   const [olderNotifications, setOlderNotifications] = useState<Notification[]>(MOCK_OLDER_NOTIFICATIONS);
   const [isDismissModalVisible, setIsDismissModalVisible] = useState(false);

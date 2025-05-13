@@ -30,10 +30,12 @@ import {
   postponeTask,
   nudgeTask,
   clearAllTasks,
+  debugTaskParticipants,
 } from "@/lib/powersync/taskService";
 import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
 import { usePowerSyncApp } from "@/lib/powersync/provider";
 import AddTaskCard from "@/components/tasks/AddTaskCard";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 export default function TasksScreen() {
   // Use PowerSync hooks to get tasks
@@ -41,6 +43,7 @@ export default function TasksScreen() {
   const { isConnected, offlineMode } = usePowerSyncApp();
   const headerHeight = useHeaderHeight();
   const [isClearing, setIsClearing] = useState(false);
+  const { signOut } = useAuth();
 
   // Remove modal state, add inline card state
   const [showAddCard, setShowAddCard] = useState(false);
@@ -49,11 +52,33 @@ export default function TasksScreen() {
   // AddTaskCard state lifted up
   const [addTitle, setAddTitle] = useState("");
   const [addDetails, setAddDetails] = useState("");
+  const [contributorIds, setContributorIds] = useState<number[]>([]);
+
+  const handleLogout = async () => {
+    try {
+      Haptics.selectionAsync();
+      await signOut();
+    } catch (error) {
+      console.error("Error logging out:", error);
+      Alert.alert("Error", "Failed to log out. Please try again.");
+    }
+  };
 
   const handleCompleteTask = async (task: Task) => {
     try {
-      await completeTask(task.id);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const success = await completeTask(task.id);
+      
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        // Show alert that user is not allowed to complete this task
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert(
+          "Action Not Allowed",
+          "Only the task owner can mark a task as complete.",
+          [{ text: "OK" }]
+        );
+      }
     } catch (error) {
       console.error("Error completing task:", error);
       Alert.alert("Error", "Failed to complete task");
@@ -82,23 +107,9 @@ export default function TasksScreen() {
   };
 
   const handleFinishAllTasks = () => {
-    // Check for postponed tasks before showing "All Done!"
-    const postponedCount = tasks.filter((task) => task.isPostponed).length;
-    
-    // Only show "All Done!" if there are no postponed tasks
-    if (postponedCount === 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        "All Done!",
-        "You have completed all your tasks for today. Great job!"
-      );
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        "Tasks Complete",
-        "You've completed your active tasks. There are still some tasks in your Later Stack."
-      );
-    }
+    // Just trigger haptic feedback without showing any alert
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // No Alert.alert dialog
   };
 
   // Navigate to reset screen
@@ -141,15 +152,28 @@ export default function TasksScreen() {
 
   const handleNudgeTask = async (task: Task) => {
     try {
-      await nudgeTask(task.id);
+      // Debug the task participants first
+      await debugTaskParticipants(task.id);
       
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const success = await nudgeTask(task.id);
       
-      Alert.alert(
-        "Task Nudged",
-        `You've nudged "${task.title}". This will remind collaborators about this task.`,
-        [{ text: "OK" }]
-      );
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        Alert.alert(
+          "Task Nudged",
+          `You've nudged "${task.title}". This will remind collaborators about this task.`,
+          [{ text: "OK" }]
+        );
+      } else {
+        // Show alert that user is not allowed to nudge this task
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert(
+          "Action Not Allowed",
+          "Only collaborators with 'nudger' role can nudge a task. Task owners cannot nudge their own tasks.",
+          [{ text: "OK" }]
+        );
+      }
     } catch (error) {
       console.error("Error nudging task:", error);
       Alert.alert("Error", "Failed to nudge task");
@@ -173,10 +197,11 @@ export default function TasksScreen() {
         isCompleted: false,
         isPostponed: false,
         postponedCount: 0,
-      });
+      }, contributorIds);
       setShowAddCard(false);
       setAddTitle("");
       setAddDetails("");
+      setContributorIds([]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Alert.alert("Error", "Failed to create task. Please try again.");
@@ -190,6 +215,7 @@ export default function TasksScreen() {
     setShowAddCard(false);
     setAddTitle("");
     setAddDetails("");
+    setContributorIds([]);
   };
 
   // Compose tasks for deck
@@ -233,6 +259,9 @@ export default function TasksScreen() {
             <TouchableOpacity onPress={navigateToNotifications}>
               <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
             </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+              <Ionicons name="log-out-outline" size={26} color="#3800FF" />
+            </TouchableOpacity>
           </View>
         </View>
       </RNSafeAreaView>
@@ -263,6 +292,11 @@ export default function TasksScreen() {
               setTitle: setAddTitle,
               details: addDetails,
               setDetails: setAddDetails,
+              contributorIds: contributorIds,
+              setContributorIds: setContributorIds,
+              onSave: handleCreateTask,
+              onDiscard: handleDiscard,
+              saving: isSaving,
             } : undefined}
           />
         )}
@@ -340,7 +374,7 @@ export default function TasksScreen() {
         </View>
       )}
 
-      {/* <View style={styles.footer}>
+       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.resetButton}
           onPress={navigateToResetScreen}
@@ -349,7 +383,6 @@ export default function TasksScreen() {
           <Text style={styles.resetButtonText}>Reset Database</Text>
         </TouchableOpacity>
       </View> 
-      Not needed for now */} 
 
       {/* Add Task Button */}
       {!showAddCard && (
@@ -519,13 +552,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   emptyStateText: {
-    color: "#9CA0AA",
+    fontSize: 18,
+    color: "#666",
     textAlign: "center",
-    fontFamily: "Pally",
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 32,
-    letterSpacing: -0.25,
+    paddingHorizontal: 40,
+    fontWeight: "bold",
   },
   emptyStateSubtext: {
     fontSize: 14,
@@ -647,5 +678,12 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  logoutButton: {
+    marginLeft: 8,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

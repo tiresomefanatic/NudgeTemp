@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { clearAllTasks } from '@/lib/powersync/taskService';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 export default function ResetScreen() {
   const router = useRouter();
+  const { session, signOut } = useAuth();
   const [isClearing, setIsClearing] = useState(false);
+
+  // Redirect to auth if not logged in
+  if (!session) {
+    return <Redirect href="/(auth)" />;
+  }
 
   const handleClearAllTasks = async () => {
     try {
@@ -48,10 +55,14 @@ export default function ResetScreen() {
       <StatusBar style="auto" />
       
       <View style={styles.content}>
-        <Text style={styles.title}>Database Reset Tool</Text>
+        <Text style={styles.title}>Complete Database Reset</Text>
         <Text style={styles.description}>
-          Use this tool to clear all tasks from your local PowerSync database.
-          This will also remove them from Supabase once sync is complete.
+          This tool will:
+          {'\n\n'}• Clear all tasks from your local database
+          {'\n'}• Delete the database file to remove pending sync
+          {'\n'}• Fix any sync constraint issues
+          {'\n'}• Remove all related data from Supabase
+          {'\n\n'}You may need to restart the app after reset.
         </Text>
         
         <TouchableOpacity

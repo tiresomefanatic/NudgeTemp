@@ -23,6 +23,8 @@ import { Task } from "../../types/task";
 import TaskCard from "./TaskCard";
 import { powersync } from "@/lib/powersync/database";
 import AddTaskCard from "./AddTaskCard";
+import { getCurrentUserRoleForTask } from "@/lib/powersync/taskService";
+import { useCurrentUser } from "@/lib/powersync/userService";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85;
@@ -64,9 +66,21 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   // Animation value for list transitions
   const listAnimationValue = useRef(new Animated.Value(0)).current;
   
+  // User role tracking for each task
+  const [userRoles, setUserRoles] = useState<Record<string, 'owner' | 'nudger' | null>>({});
+  const [loadingRoles, setLoadingRoles] = useState(true);
+  const { user: currentUser } = useCurrentUser();
+  
   // Animation values for the card
   const position = useRef(new Animated.ValueXY()).current;
   const cardOpacity = useRef(new Animated.Value(1)).current;
+  // Animation value for transitions between cards
+  const transitionAnimation = useRef(new Animated.Value(0)).current;
+  // Track if a swipe animation is in progress to prevent interruptions
+  const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
+  // Track which card is being animated out (-1 for none)
+  const animatingCardIndex = useRef(-1);
+  
   const rotateAnimValue = position.x.interpolate({
     inputRange: [-width * 0.7, 0, width * 0.7],
     outputRange: [`-${ROTATION_ANGLE}deg`, '0deg', `${ROTATION_ANGLE}deg`],
@@ -98,6 +112,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     extrapolate: 'clamp',
   });
 
+  // Add animation refs for the entire stack
+  const secondCardScale = useRef(new Animated.Value(0.97)).current;
+  const secondCardTranslateY = useRef(new Animated.Value(-18)).current;
+  const thirdCardScale = useRef(new Animated.Value(0.94)).current;
+  const thirdCardTranslateY = useRef(new Animated.Value(-36)).current;
+  const [isPromotingCards, setIsPromotingCards] = useState(false);
+
   // Initialize the deck when we receive initialTasks
   useEffect(() => {
     if (initialTasks && initialTasks.length > 0) {
@@ -106,8 +127,94 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       setCardIndex(0);
       // Reset animation values
       position.setValue({ x: 0, y: 0 });
+      transitionAnimation.setValue(0);
+      setIsSwipeAnimating(false);
+      animatingCardIndex.current = -1;
+      
+      // Set immediate optimistic permissions for the top task
+      if (initialTasks[0]?.id !== 'add' && currentUser) {
+        const topTask = initialTasks[0];
+        const tempRoles = { ...userRoles };
+        
+        // If user is creator, they're the owner
+        if (topTask.creatorId === currentUser.id) {
+          tempRoles[topTask.id] = 'owner';
+        } 
+        // Otherwise, assume they might be a nudger for optimistic UI
+        // The actual role will be updated when fetchUserRolesForTasks completes
+        else if (topTask.creatorId !== currentUser.id) {
+          tempRoles[topTask.id] = 'nudger';
+        }
+        
+        setUserRoles(tempRoles);
+      }
+      
+      // Then fetch accurate roles for all tasks
+      fetchUserRolesForTasks(initialTasks);
     }
-  }, [initialTasks]);
+  }, [initialTasks, currentUser]);
+  
+  // Function to fetch user roles for all tasks
+  const fetchUserRolesForTasks = useCallback(async (tasks: Task[]) => {
+    if (!currentUser) return;
+    
+    setLoadingRoles(true);
+    const roles: Record<string, 'owner' | 'nudger' | null> = {};
+    
+    // Batch fetch approach - create an array of promises for all tasks
+    const rolePromises = tasks
+      .filter(task => task.id !== 'add')
+      .map(async task => {
+        try {
+          const role = await getCurrentUserRoleForTask(task.id);
+          return { taskId: task.id, role };
+        } catch (error) {
+          console.error('Error fetching role for task:', task.id, error);
+          return { taskId: task.id, role: null };
+        }
+      });
+    
+    // Wait for all role fetches to complete
+    const results = await Promise.all(rolePromises);
+    
+    // Convert results to the roles object
+    results.forEach(result => {
+      roles[result.taskId] = result.role;
+    });
+    
+    setUserRoles(roles);
+    setLoadingRoles(false);
+  }, [currentUser]);
+  
+  // Check if user can complete a task with optimistic fallback
+  const canCompleteTask = useCallback((taskId: string) => {
+    // If roles are loading and this is the top card, optimistically allow
+    if (loadingRoles && taskId === activeTasks[cardIndex]?.id) {
+      // Default permissions for top card while loading: 
+      // Allow complete if user created the task
+      const task = activeTasks.find(t => t.id === taskId);
+      if (task && task.creatorId === currentUser?.id) {
+        return true;
+      }
+    }
+    
+    return userRoles[taskId] === 'owner';
+  }, [userRoles, loadingRoles, activeTasks, cardIndex, currentUser]);
+  
+  // Check if user can nudge a task with optimistic fallback
+  const canNudgeTask = useCallback((taskId: string) => {
+    // If roles are loading and this is the top card, optimistically allow
+    if (loadingRoles && taskId === activeTasks[cardIndex]?.id) {
+      // Default permissions for top card while loading:
+      // Allow nudge if user did NOT create the task (likely a nudger)
+      const task = activeTasks.find(t => t.id === taskId);
+      if (task && task.creatorId !== currentUser?.id) {
+        return true;
+      }
+    }
+    
+    return userRoles[taskId] === 'nudger';
+  }, [userRoles, loadingRoles, activeTasks, cardIndex, currentUser]);
 
   // Function to handle when a card is swiped left (postponed)
   const handleSwipedLeft = useCallback((index: number) => {
@@ -117,14 +224,25 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     // Call the parent's callback to mark the task as postponed
     onPostpone(taskToPostpone);
     
+    // Update the active tasks array to ensure smooth transition
+    // Use a callback to ensure we get the latest state
+    setActiveTasks(currentTasks => {
+      // Create a copy of the tasks
+      const updatedTasks = [...currentTasks];
+      // Move the swiped task to the end (for left swipe)
+      if (index < updatedTasks.length) {
+        const [removedTask] = updatedTasks.splice(index, 1);
+        updatedTasks.push(removedTask);
+      }
+      return updatedTasks;
+    });
+    
     // Update the current index to show the next task
     setCardIndex(prevIndex => prevIndex + 1);
     
-    // Reset immediately (without animation) for a clean state for the next card
-    position.setValue({ x: 0, y: 0 });
-    
-    // Note: We don't need to manually move the task here as the useTasks hook
-    // will now return all tasks with postponed ones at the end of the queue
+    // Reset animation states after all state updates
+    setIsSwipeAnimating(false);
+    animatingCardIndex.current = -1;
   }, [activeTasks, onPostpone]);
 
   // Function to handle when a card is swiped right (completed)
@@ -132,11 +250,12 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     // Task complete
     onComplete(activeTasks[index]);
     
-    // Update the current index
+    // Update the current index to show the next task
     setCardIndex(prevIndex => prevIndex + 1);
     
-    // Reset immediately (without animation) for a clean state for the next card
-    position.setValue({ x: 0, y: 0 });
+    // Reset animation states after all state updates
+    setIsSwipeAnimating(false);
+    animatingCardIndex.current = -1;
   }, [activeTasks, onComplete]);
 
   // Function to handle when a card is swiped upward (nudged)
@@ -147,6 +266,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     
     onNudge(taskToNudge);
     
+    // Reset animation states
+    setIsSwipeAnimating(false);
+    animatingCardIndex.current = -1;
+
+    // Return to center position smoothly
     Animated.spring(position, {
       toValue: { x: 0, y: 0 },
       friction: 5,
@@ -157,66 +281,198 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   // Reset position after swipe
   const resetPosition = () => {
-    Animated.spring(position, {
-      toValue: { x: 0, y: 0 },
-      friction: 5,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
+    // Only reset if we're not in the middle of a swipe animation
+    if (!isSwipeAnimating) {
+      Animated.spring(position, {
+        toValue: { x: 0, y: 0 },
+        friction: 5,
+        tension: 40,
+        useNativeDriver: true,
+      }).start();
+    }
   };
+
+  // Modified to animate the entire stack (both 2nd and 3rd cards)
+  const animateStackPromotion = useCallback(() => {
+    setIsPromotingCards(true);
+    return new Promise<void>((resolve) => {
+      Animated.parallel([
+        // Animate 2nd card to top position
+        Animated.timing(secondCardScale, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(secondCardTranslateY, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        // Animate 3rd card to 2nd position
+        Animated.timing(thirdCardScale, {
+          toValue: 0.97,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(thirdCardTranslateY, {
+          toValue: -18,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Reset animation values for next time
+        secondCardScale.setValue(0.97);
+        secondCardTranslateY.setValue(-18);
+        thirdCardScale.setValue(0.94);
+        thirdCardTranslateY.setValue(-36);
+        setIsPromotingCards(false);
+        resolve();
+      });
+    });
+  }, [secondCardScale, secondCardTranslateY, thirdCardScale, thirdCardTranslateY]);
+
+  // Modified completeSwipe to use the stack promotion animation
+  const completeSwipe = useCallback(
+    async (direction: 'left' | 'right', index: number, gesture: { dx: number, dy: number }) => {
+      if (isSwipeAnimating) return;
+      
+      const task = activeTasks[index];
+      
+      // Check permissions for right swipe (complete)
+      if (direction === 'right' && !canCompleteTask(task.id)) {
+        // User is not allowed to complete this task, reset position
+        resetPosition();
+        return;
+      }
+      
+      setIsSwipeAnimating(true);
+      animatingCardIndex.current = index;
+
+      // Animate outgoing card
+      const targetX = direction === 'left' ? -width * 1.5 : width * 1.5;
+      await new Promise<void>((resolve) => {
+        Animated.timing(position, {
+          toValue: { x: targetX, y: gesture.dy },
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          resolve();
+        });
+      });
+
+      // Animate full stack promotion if there are enough cards
+      if (activeTasks.length > cardIndex + 1) {
+        await animateStackPromotion();
+      }
+
+      // Reset position immediately before the state updates
+      position.setValue({ x: 0, y: 0 });
+
+      // Update state after animation is complete
+      if (direction === 'left') {
+        handleSwipedLeft(index);
+      } else {
+        handleSwipedRight(index);
+      }
+    }, [isSwipeAnimating, position, activeTasks, cardIndex, handleSwipedLeft, handleSwipedRight, animateStackPromotion, canCompleteTask]);
 
   // Create pan responder for swipe gestures
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: (evt, gestureState) => {
       // Don't capture gestures for very small movements (likely scrolling)
-      return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
+      // Also don't capture if we're already animating a swipe
+      return !isSwipeAnimating && (Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5);
     },
     onMoveShouldSetPanResponder: (evt, gestureState) => {
-      // Capture horizontal movements for card swiping
-      // For upward swipes, make sure we're primarily moving up (negative dy)
-      // and the movement is significant
-      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy * 1.5) ||
-             (gestureState.dy < -5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx));
-    },
-    onPanResponderMove: (_, gesture) => {
-      // Apply movement constraints to y-axis for better upward swipe behavior
-      // This makes the upward swipe feel more responsive and natural
-      let y = gesture.dy;
+      // Don't capture if we're already animating a swipe
+      if (isSwipeAnimating) return false;
       
-      // Make upward movement (negative dy) more pronounced, but dampen it slightly
-      // for more natural feel as card goes higher
-      if (gesture.dy < 0) {
-        // Apply progressive resistance as the card moves further up
-        const dampenFactor = Math.min(1, Math.abs(gesture.dy) / (height * 0.6));
-        y = gesture.dy * (1 - (dampenFactor * 0.3));
-      } else {
-        // Restrict downward movement more
-        y = gesture.dy * 0.4;
+      const currentTask = activeTasks[cardIndex];
+      
+      // For upward swipes (nudge), check if user is allowed to nudge
+      if (gestureState.dy < -5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx)) {
+        // Allow nudging if:
+        // 1. User has nudger role, OR
+        // 2. Roles are still loading and user is not the creator (likely a nudger)
+        return !!(onNudge && (
+          canNudgeTask(currentTask.id) || 
+          (loadingRoles && currentTask.creatorId !== currentUser?.id)
+        ));
       }
       
-      position.setValue({ x: gesture.dx, y });
+      // For right swipes (complete), check if user is allowed to complete
+      if (gestureState.dx > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)) {
+        // Allow completing if:
+        // 1. User has owner role, OR
+        // 2. Roles are still loading and user is the creator (likely an owner)
+        return !!(
+          canCompleteTask(currentTask.id) || 
+          (loadingRoles && currentTask.creatorId === currentUser?.id)
+        );
+      }
+      
+      // Always allow left swipes for postpone regardless of role
+      return true;
+    },
+    onPanResponderMove: (_, gesture) => {
+      // Don't move the card if we're already animating a swipe
+      if (isSwipeAnimating) return;
+      
+      const currentTask = activeTasks[cardIndex];
+      
+      // For upward movement (nudge)
+      if (gesture.dy < 0 && Math.abs(gesture.dy) > Math.abs(gesture.dx)) {
+        // Allow upward movement if user can nudge or if we're still loading roles for the top card
+        if ((onNudge && canNudgeTask(currentTask.id)) || 
+            (loadingRoles && currentTask.creatorId !== currentUser?.id)) {
+          // Apply movement constraints to y-axis for better upward swipe behavior
+          // Make upward movement more pronounced, but dampen it for more natural feel
+          const dampenFactor = Math.min(1, Math.abs(gesture.dy) / (height * 0.6));
+          const y = gesture.dy * (1 - (dampenFactor * 0.3));
+          position.setValue({ x: gesture.dx, y });
+        }
+      } 
+      // For right movement (complete)
+      else if (gesture.dx > 0 && Math.abs(gesture.dx) > Math.abs(gesture.dy)) {
+        // Allow rightward movement if user can complete or if we're still loading roles for the top card
+        if (canCompleteTask(currentTask.id) || 
+            (loadingRoles && currentTask.creatorId === currentUser?.id)) {
+          position.setValue({ x: gesture.dx, y: gesture.dy });
+        }
+      }
+      // Always allow left movement (postpone)
+      else {
+        position.setValue({ x: gesture.dx, y: gesture.dy });
+      }
     },
     onPanResponderRelease: (_, gesture) => {
-      if (gesture.dx > SWIPE_THRESHOLD) {
-        // Swiped right - complete
-        Animated.timing(position, {
-          toValue: { x: width * 1.5, y: gesture.dy },
-          duration: 250,
-          useNativeDriver: true,
-        }).start(() => {
-          handleSwipedRight(cardIndex);
-        });
+      // Don't handle release if we're already animating a swipe
+      if (isSwipeAnimating) return;
+      
+      const currentTask = activeTasks[cardIndex];
+      
+      // Determine if the user can complete using optimistic permissions
+      const canCompleteOptimistic = 
+        canCompleteTask(currentTask.id) || 
+        (loadingRoles && currentTask.creatorId === currentUser?.id);
+        
+      // Determine if the user can nudge using optimistic permissions
+      const canNudgeOptimistic = 
+        (onNudge && canNudgeTask(currentTask.id)) || 
+        (loadingRoles && onNudge && currentTask.creatorId !== currentUser?.id);
+      
+      if (gesture.dx > SWIPE_THRESHOLD && canCompleteOptimistic) {
+        // Swiped right - complete (only if user is allowed)
+        completeSwipe('right', cardIndex, gesture);
       } else if (gesture.dx < -SWIPE_THRESHOLD) {
-        // Swiped left - postpone
-        Animated.timing(position, {
-          toValue: { x: -width * 1.5, y: gesture.dy },
-          duration: 250,
-          useNativeDriver: true,
-        }).start(() => {
-          handleSwipedLeft(cardIndex);
-        });
-      } else if (gesture.dy < -SWIPE_UP_THRESHOLD && onNudge) {
-        // Swiped up - nudge
+        // Swiped left - postpone (anyone can postpone)
+        completeSwipe('left', cardIndex, gesture);
+      } else if (gesture.dy < -SWIPE_UP_THRESHOLD && canNudgeOptimistic) {
+        // Swiped up - nudge (only if user is allowed)
+        // Prevent interruption of this animation
+        setIsSwipeAnimating(true);
+        animatingCardIndex.current = cardIndex;
+        
         // Create a sequence of animations for a more polished effect
         Animated.parallel([
           // Move card upward
@@ -253,7 +509,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         resetPosition();
       }
     },
-  }), [cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedUp, onNudge]);
+    onPanResponderTerminate: () => {
+      // If the gesture is terminated for any reason, reset everything
+      if (!isSwipeAnimating) {
+        resetPosition();
+      }
+    },
+  }), [cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedUp, onNudge, isSwipeAnimating, completeSwipe, canCompleteTask, canNudgeTask, activeTasks, loadingRoles, currentUser]);
 
   // Check for postponed tasks in the system
   useEffect(() => {
@@ -279,57 +541,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   // Check if all cards have been swiped
   useEffect(() => {
-    // If no more cards at all, but only call onFinish if it exists
-    // AND there are no postponed tasks in the system
-    if (cardIndex >= activeTasks.length && onFinish) {
-      // We should check for postponed tasks in the app before showing "All Done!"
-      // This prevents showing "All Done!" when there are postponed tasks
-      
-      // Check for any postponed tasks before showing "All Done!"
-      const checkPostponedTasks = async () => {
-        try {
-          // Query for any postponed tasks
-          const result = await powersync.execute(
-            "SELECT COUNT(*) as count FROM tasks WHERE is_postponed = 1"
-          );
-          
-          // Only call onFinish if there are no postponed tasks
-          const postponedCount = result.rows?._array?.[0]?.count || 0;
-          if (postponedCount === 0) {
-            onFinish();
-          }
-        } catch (error) {
-          console.error("Error checking for postponed tasks:", error);
-        }
-      };
-      
-      checkPostponedTasks();
-    }
+    // No longer need to call onFinish when all cards are swiped
+    // This prevents the "All Done!" popup from appearing
   }, [cardIndex, activeTasks.length, onFinish]);
 
-  // Animate card transitions
+  // Animate card transitions - we don't need this useEffect anymore since we trigger the animation directly
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const transitionAnimation = useRef(new Animated.Value(0)).current;
   
-  // When cardIndex changes, trigger the transition animation
-  useEffect(() => {
-    if (cardIndex > 0) {
-      setIsTransitioning(true);
-      
-      // Reset to prepare for animation
-      transitionAnimation.setValue(0);
-      
-      // Animate the transition
-      Animated.timing(transitionAnimation, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        setIsTransitioning(false);
-      });
-    }
-  }, [cardIndex]);
-
   // Prepare combined tasks for display (active tasks first, then postponed)
   const allTasks = useMemo(() => {
     return [...activeTasks, ...postponedTasks];
@@ -365,11 +583,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     return (
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
-          {!hasPostponedTasks ? (
-            <Text style={styles.emptyText}>All done for today! 🎉</Text>
-          ) : (
-            <Text style={styles.emptyText}>No active tasks</Text>
-          )}
+          <Text style={styles.emptyText}>Your task list is empty</Text>
         </View>
       </View>
     );
@@ -377,79 +591,69 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
 
   // Render stack cards (show top 3 cards)
   const renderStackCards = () => {
-    // Get up to 3 cards to show in the stack
     const visibleCards = activeTasks.slice(cardIndex, cardIndex + 3);
-    
-    // Render cards from back to front (bottom to top)
-    // This way, the first card (current card) will be on top in z-index
     return (
       <View style={styles.cardsContainer}>
-        {/* Render cards in order from bottom to top */}
         {visibleCards.map((task, idx) => {
-          // If the top card is AddTaskCard, give it a slightly larger offset
           let cardYPosition = -18 * idx;
-          if (idx === 0 && task.id === "add") {
-            cardYPosition = -28; // lift AddTaskCard a bit more for even spacing
-          }
+          if (idx === 0 && task.id === "add") cardYPosition = -28;
           const isTopCard = idx === 0;
-          
-          // For the second card, apply a transition animation when it becomes the top card
-          const secondCardAnimation = isTransitioning && idx === 0 ? {
-            // Start from a position behind and scale slightly smaller
-            transform: [
-              { 
-                scale: transitionAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.97, 1],
-                })
-              },
-              {
-                translateY: transitionAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-18, cardYPosition],
-                })
-              }
-            ],
-            // Fade in to normal opacity
-            opacity: transitionAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.95, 1],
-            })
-          } : {};
-          
-          // Card styling
+          const isSecondCard = idx === 1;
+          const isThirdCard = idx === 2;
+          const cardScale = 1 - (idx * 0.03);
+          const shouldApplyPanResponder = isTopCard && task.id !== "add" && !isSwipeAnimating;
+
+          // Animation styles for each card position
+          let animatedStyle = {};
+          if (isPromotingCards) {
+            if (isSecondCard) {
+              animatedStyle = {
+                transform: [
+                  { scale: secondCardScale },
+                  { translateY: secondCardTranslateY },
+                ],
+                zIndex: 2,
+              };
+            } else if (isThirdCard) {
+              animatedStyle = {
+                transform: [
+                  { scale: thirdCardScale },
+                  { translateY: thirdCardTranslateY },
+                ],
+                zIndex: 1,
+              };
+            }
+          }
+
           const cardStyle = {
             ...styles.cardStyle,
-            // Top card has highest z-index
             zIndex: 3 - idx,
-            // Decrease opacity for cards in the back
             opacity: 1 - (idx * 0.05),
             transform: [
-              // Decrease scale for cards in the back
-              { scale: 1 - (idx * 0.03) },
-              // Position cards vertically with the active card at the bottom
-              { translateY: cardYPosition }
+              { scale: cardScale },
+              { translateY: cardYPosition },
             ],
-            ...(isTopCard && isTransitioning ? secondCardAnimation : {}),
+            ...animatedStyle,
           };
 
           if (isTopCard) {
             return (
-              <Animated.View 
-                key={`${task.id}-${cardIndex}`} 
+              <Animated.View
+                key={`${task.id}-${cardIndex}`}
                 style={[
-                  styles.cardStyle, 
-                  cardStyle, 
+                  styles.cardStyle,
+                  cardStyle,
                   {
                     transform: [
                       { translateX: position.x },
                       { translateY: position.y },
                       { scale: cardScale },
-                      { rotate: rotateAnimValue }
-                    ]
-                  }
+                      { rotate: rotateAnimValue },
+                    ],
+                    opacity: cardOpacity,
+                  },
                 ]}
-                {...(task.id !== "add" ? panResponder.panHandlers : {})}
+                {...(shouldApplyPanResponder ? panResponder.panHandlers : {})}
               >
                 <View style={styles.cardWrapper}>
                   {task.id === "add" ? (
@@ -462,24 +666,24 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                 {task.id !== "add" && (
                   <>
                     {/* Left Swipe (Postpone) Overlay */}
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.overlayContainer, 
-                        styles.leftOverlay, 
-                        { opacity: leftSwipeOverlayOpacity }
+                        styles.overlayContainer,
+                        styles.leftOverlay,
+                        { opacity: leftSwipeOverlayOpacity },
                       ]}
                     >
                       <View style={styles.overlayContent}>
-                        <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, {transform: [{rotate: '12deg'}]}]} />
+                        <Image source={require('../../assets/icons/YellowPostpone.png')} style={[styles.overlayIcon, { transform: [{ rotate: '12deg' }] }]} />
                         <Text style={styles.latenText}>Later</Text>
                       </View>
                     </Animated.View>
                     {/* Right Swipe (Complete) Overlay */}
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.overlayContainer, 
-                        styles.rightOverlay, 
-                        { opacity: rightSwipeOverlayOpacity }
+                        styles.overlayContainer,
+                        styles.rightOverlay,
+                        { opacity: rightSwipeOverlayOpacity },
                       ]}
                     >
                       <View style={styles.overlayContent}>
@@ -488,11 +692,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                       </View>
                     </Animated.View>
                     {/* Upward Swipe (Nudge) Overlay */}
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.overlayContainer, 
-                        styles.upOverlay, 
-                        { opacity: upSwipeOverlayOpacity }
+                        styles.overlayContainer,
+                        styles.upOverlay,
+                        { opacity: upSwipeOverlayOpacity },
                       ]}
                     >
                       <View style={styles.overlayContent}>
@@ -506,19 +710,27 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
             );
           }
 
+          // For second and third cards, apply animated promotion styles
+          if ((isSecondCard || isThirdCard) && isPromotingCards) {
+            return (
+              <Animated.View
+                key={`${task.id}-${cardIndex}-${idx}`}
+                style={[styles.cardStyle, cardStyle]}
+              >
+                {task.id === "add" ? (
+                  <AddTaskCard {...addTaskCardProps} />
+                ) : (
+                  <TaskCard task={task} style={styles.centerCard} />
+                )}
+              </Animated.View>
+            );
+          }
+
+          // For all other cards
           return (
-            <Animated.View 
-              key={`${task.id}-${cardIndex}-${idx}`} 
-              style={[
-                styles.cardStyle, 
-                cardStyle,
-                idx === 1 ? { // Special animation for the card that will become the top card next
-                  transform: [
-                    { scale: 1 - (idx * 0.03) },
-                    { translateY: cardYPosition }
-                  ]
-                } : null
-              ]}
+            <Animated.View
+              key={`${task.id}-${cardIndex}-${idx}`}
+              style={[styles.cardStyle, cardStyle]}
             >
               {task.id === "add" ? (
                 <AddTaskCard {...addTaskCardProps} />

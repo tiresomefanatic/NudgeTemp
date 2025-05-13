@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,8 +13,10 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useCurrentUser, useAllUsers, User } from "@/lib/powersync/userService";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85;
@@ -25,19 +27,21 @@ interface AddTaskCardProps {
   setTitle: (v: string) => void;
   details: string;
   setDetails: (v: string) => void;
+  contributorIds?: number[];
+  setContributorIds?: (ids: number[]) => void;
 }
 
-// Mock friends data
-const MOCK_FRIENDS = [
-  { id: '1', name: 'Alice' },
-  { id: '2', name: 'Alice' },
-  { id: '3', name: 'Alice' },
-  { id: '4', name: 'Alice' },
-];
-
-export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, details, setDetails }) => {
-  const [contributors, setContributors] = useState<string[]>(["Alice", "Rachel"]);
-  const [selectedContributor, setSelectedContributor] = useState<string>("Alice");
+export const AddTaskCard: React.FC<AddTaskCardProps> = ({ 
+  title, 
+  setTitle, 
+  details, 
+  setDetails,
+  contributorIds = [],
+  setContributorIds = () => {},
+}) => {
+  const { user: currentUser, loading: loadingCurrentUser } = useCurrentUser();
+  const { users, loading: loadingUsers } = useAllUsers();
+  
   const [dueDate, setDueDate] = useState(false);
   const [repeating, setRepeating] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -45,6 +49,9 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
   const [monthOffset, setMonthOffset] = useState(0);
   const [isAddFriendsModalVisible, setIsAddFriendsModalVisible] = useState(false);
 
+  // Get users who are already selected as contributors
+  const selectedContributors = users.filter(user => contributorIds.includes(user.id));
+  
   // Helper to get days for the current week
   const getWeekDays = (baseDate: Date, weekOffset: number) => {
     const date = new Date(baseDate);
@@ -82,8 +89,20 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
     </TouchableOpacity>
   );
 
-  const handleContributorSelect = (contributor: string) => {
-    setSelectedContributor(contributor);
+  const handleAddContributor = (userId: number) => {
+    // Don't add if already in the list
+    if (contributorIds.includes(userId)) return;
+    
+    // Add the user ID to the contributors list
+    setContributorIds([...contributorIds, userId]);
+    
+    // Close the modal
+    setIsAddFriendsModalVisible(false);
+  };
+
+  const handleRemoveContributor = (userId: number) => {
+    // Remove the user from contributors
+    setContributorIds(contributorIds.filter(id => id !== userId));
   };
 
   const openAddFriendsModal = () => {
@@ -94,10 +113,43 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
     setIsAddFriendsModalVisible(false);
   };
 
-  const handleAddFriend = (friendId: string) => {
-    // Mock implementation - in a real app, this would add the friend to the contributors
-    console.log(`Adding friend with ID: ${friendId}`);
+  // Format user's name for display
+  const formatUserName = (user: User | null): string => {
+    if (!user) return 'You';
+    if (user.first_name && user.last_name) {
+      return `${user.first_name} ${user.last_name}`;
+    }
+    if (user.first_name) {
+      return user.first_name;
+    }
+    return user.email.split('@')[0];
   };
+
+  // Get first letter of name for avatar
+  const getNameInitial = (user: User): string => {
+    if (user.first_name) {
+      return user.first_name.charAt(0).toUpperCase();
+    }
+    return user.email.charAt(0).toUpperCase();
+  };
+
+  const titleInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    // Focus the title input when the card mounts
+    if (titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, []);
+
+  // Loading state
+  if (loadingCurrentUser || loadingUsers) {
+    return (
+      <View style={[styles.card, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#3800FF" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.card}>
@@ -118,26 +170,38 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
                 <View style={styles.addFriendsModal}>
                   <View style={styles.modalIndicator} />
                   
-                  <Text style={styles.addFriendsTitle}>Add Friends</Text>
+                  <Text style={styles.addFriendsTitle}>Add Contributors</Text>
                   
                   <ScrollView style={styles.friendsList}>
-                    {MOCK_FRIENDS.map((friend) => (
-                      <View key={friend.id} style={styles.friendItem}>
-                        <View style={styles.friendInfo}>
-                          <View style={styles.friendAvatar}>
-                            <Text style={styles.friendAvatarText}>A</Text>
+                    {users
+                      .filter(user => user.id !== currentUser?.id) // Don't show current user
+                      .map((user) => (
+                        <View key={user.id} style={styles.friendItem}>
+                          <View style={styles.friendInfo}>
+                            <View style={styles.friendAvatar}>
+                              <Text style={styles.friendAvatarText}>{getNameInitial(user)}</Text>
+                            </View>
+                            <Text style={styles.friendName}>{formatUserName(user)}</Text>
                           </View>
-                          <Text style={styles.friendName}>{friend.name}</Text>
+                          <TouchableOpacity 
+                            style={[
+                              styles.addFriendButton,
+                              contributorIds.includes(user.id) && styles.addFriendButtonSelected
+                            ]}
+                            onPress={() => contributorIds.includes(user.id) 
+                              ? handleRemoveContributor(user.id)
+                              : handleAddContributor(user.id)
+                            }
+                          >
+                            <Text style={styles.addFriendButtonText}>
+                              {contributorIds.includes(user.id) ? 'Remove' : 'Add'}
+                            </Text>
+                            <Text style={styles.addFriendButtonPlus}>
+                              {contributorIds.includes(user.id) ? '-' : '+'}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
-                        <TouchableOpacity 
-                          style={styles.addFriendButton}
-                          onPress={() => handleAddFriend(friend.id)}
-                        >
-                          <Text style={styles.addFriendButtonText}>Add</Text>
-                          <Text style={styles.addFriendButtonPlus}>+</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
+                      ))}
                   </ScrollView>
                 </View>
               </KeyboardAvoidingView>
@@ -149,14 +213,16 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
         {/* Title - Now this is the main input field */}
         <TextInput
+          ref={titleInputRef}
           style={styles.titleInput}
           placeholder="Enter a task title"
           value={title}
           onChangeText={setTitle}
           placeholderTextColor="#a5b4fc"
+          autoFocus={true}
         />
-        {/* By user text - Now this shows the selected contributor */}
-        <Text style={styles.byUserText}>By {selectedContributor}</Text>
+        {/* By user text - Now this shows the current user */}
+        <Text style={styles.byUserText}>By {formatUserName(currentUser)}</Text>
         
         {/* Contributors */}
         <View style={styles.sectionRow}>
@@ -171,21 +237,21 @@ export const AddTaskCard: React.FC<AddTaskCardProps> = ({ title, setTitle, detai
           </TouchableOpacity>
         </View>
         <View style={styles.contributorsRow}>
-          {contributors.map((c) => (
-            <TouchableOpacity 
-              key={c} 
-              style={[
-                styles.contributorPill,
-                selectedContributor === c && styles.selectedContributorPill
-              ]}
-              onPress={() => handleContributorSelect(c)}
-            >
-              <Text style={[
-                styles.contributorPillText,
-                selectedContributor === c && styles.selectedContributorPillText
-              ]}>{c}</Text>
-            </TouchableOpacity>
-          ))}
+          {selectedContributors.length > 0 ? (
+            selectedContributors.map((user) => (
+              <TouchableOpacity 
+                key={user.id} 
+                style={styles.contributorPill}
+                onPress={() => handleRemoveContributor(user.id)}
+              >
+                <Text style={styles.contributorPillText}>
+                  {formatUserName(user)}
+                </Text>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.noContributorsText}>No contributors added yet</Text>
+          )}
         </View>
         
         {/* Details */}
@@ -371,15 +437,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
-  selectedContributorPill: {
-    backgroundColor: '#3800FF',
-  },
   contributorPillText: {
     fontWeight: '600',
     color: '#22223b',
-  },
-  selectedContributorPillText: {
-    color: '#FFFFFF',
   },
   detailsSection: {
     marginBottom: 8,
@@ -664,6 +724,19 @@ const styles = StyleSheet.create({
   addFriendButtonPlus: {
     color: '#7267FF',
     fontSize: 14,
+  },
+  // Add new styles for the updated UI
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addFriendButtonSelected: {
+    backgroundColor: '#E9EAEC',
+  },
+  noContributorsText: {
+    color: '#868B97',
+    fontStyle: 'italic',
+    marginLeft: 10,
   },
 });
 
