@@ -279,9 +279,6 @@ export default function TasksScreen() {
             <TouchableOpacity onPress={navigateToNotifications}>
               <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <Ionicons name="log-out-outline" size={26} color="#3800FF" />
-            </TouchableOpacity>
           </View>
         </View>
       </RNSafeAreaView>
