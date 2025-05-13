@@ -41,8 +41,8 @@ export const toAppTask = (record: TaskRecord): Task => {
     title: record.title || "",
     description: record.description || "",
     priority: (record.priority as "high" | "medium" | "low") || "medium",
-    isCompleted: record.is_completed === 1,
-    isPostponed: record.is_postponed === 1,
+    isCompleted: record.is_completed === 1 || false,
+    isPostponed: record.is_postponed === 1 || false,
     postponedCount: record.postponed_count || 0,
     createdAt: record.created_at || new Date().toISOString(),
     completedAt: record.completed_at || null,
@@ -470,24 +470,46 @@ export const getCurrentUserRoleForTask = async (taskId: string): Promise<Partici
 };
 
 // Function to fetch tasks including ones where the user is a participant
-const fetchTasksWithParticipants = async () => {
+const fetchParticipantTasks = async (background: boolean = false) => {
   try {
+    if (!background) {
+      console.log("🔄 Syncing tasks with Supabase...");
+    }
+    
     const currentUser = await getCurrentUser();
     if (!currentUser) {
       console.log("No logged in user found for participant tasks");
-      return [];
+      return;
     }
     
     // Ensure user_id is properly typed as number for database queries
     const userId = currentUser.id ? Number(currentUser.id) : null;
     if (!userId) {
       console.log("Invalid user ID for participant query");
-      return [];
+      return;
     }
     
-    console.log(`Fetching participant tasks for user ID: ${userId}`);
+    if (!background) {
+      console.log(`Fetching tasks for user ID: ${userId}`);
+    }
     
-    // Get all tasks where user is a participant
+    // Get active tasks created by this user - EXCLUDE COMPLETED TASKS
+    const { data: creatorTasks, error: creatorError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('creator_id', userId)
+      .eq('is_completed', 0); // Only get active tasks (not completed)
+      
+    if (creatorError) {
+      console.error("Error fetching creator tasks:", creatorError);
+      return;
+    }
+    
+    if (!background) {
+      console.log(`Found ${creatorTasks?.length || 0} active tasks where user is creator`);
+    }
+    
+    // Get all tasks where user is a participant 
     const { data: participantData, error: participantError } = await supabase
       .from('participants')
       .select(`
@@ -497,105 +519,31 @@ const fetchTasksWithParticipants = async () => {
       
     if (participantError) {
       console.error("Error fetching participant tasks:", participantError);
-      return [];
-    }
-    
-    // Early return if no participant tasks found
-    if (!participantData || participantData.length === 0) {
-      console.log("No participant tasks found");
-      return [];
-    }
-    
-    // Extract task IDs as an array of strings
-    const participantTaskIds = participantData
-      .map(p => p.task_id)
-      .filter(Boolean); // Filter out any null/undefined values
-    
-    if (participantTaskIds.length === 0) {
-      console.log("No valid participant task IDs found");
-      return [];
-    }
-    
-    console.log(`Found ${participantTaskIds.length} task IDs where user is participant`);
-    
-    // Get all tasks without filtering by completion status
-    const { data: tasks, error: tasksError } = await supabase
-      .from('tasks')
-      .select('*')
-      .in('id', participantTaskIds);
-      
-    if (tasksError) {
-      console.error("Error fetching tasks by IDs:", tasksError);
-      return [];
-    }
-    
-    console.log(`Successfully fetched ${tasks?.length || 0} tasks where user is participant`);
-    return tasks || [];
-  } catch (error) {
-    console.error("Error in fetchTasksWithParticipants:", error);
-    return [];
-  }
-};
-
-// Function to fetch participant tasks and sync them to PowerSync
-const fetchParticipantTasks = async (background: boolean = false) => {
-  try {
-    // Get current user
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      console.log("No logged in user found for tasks");
       return;
     }
     
-    // Only log when not in background mode to reduce console noise
-    if (!background) {
-      console.log("Fetching participant tasks...");
-    }
-    
-    // Ensure creator_id is properly typed as number for database queries
-    const creatorId = currentUser.id ? Number(currentUser.id) : null;
-    
-    // Get ALL tasks where the user is a creator (including completed ones)
-    const { data: creatorTasks, error: creatorError } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('creator_id', creatorId);
-    
-    if (creatorError) {
-      console.error("Error fetching creator tasks:", creatorError);
-    } else {
-      console.log(`Found ${creatorTasks?.length || 0} tasks where user is creator`);
-    }
-    
-    // Get ALL tasks where the user is a participant (including completed)
-    // First get all participant relationships
-    const { data: participantData, error: participantError } = await supabase
-      .from('participants')
-      .select(`task_id`)
-      .eq('user_id', currentUser.id);
-    
-    if (participantError) {
-      console.error("Error fetching participant relationships:", participantError);
-    }
-    
-    // Get the actual tasks for these relationships
     let participantTasks: any[] = [];
+    
     if (participantData && participantData.length > 0) {
       const participantTaskIds = participantData
         .map(p => p.task_id)
         .filter(Boolean);
         
       if (participantTaskIds.length > 0) {
+        // Only get active tasks (not completed) where user is a participant
         const { data: tasks, error: tasksError } = await supabase
           .from('tasks')
           .select('*')
-          .in('id', participantTaskIds);
+          .in('id', participantTaskIds)
+          .eq('is_completed', 0); // Only get active tasks
           
         if (tasksError) {
           console.error("Error fetching participant tasks:", tasksError);
         } else {
           participantTasks = tasks || [];
-          console.log(`Found ${participantTasks.length} tasks where user is participant`);
+          if (!background) {
+            console.log(`Found ${participantTasks.length} active tasks where user is participant`);
+          }
         }
       }
     }
@@ -606,7 +554,16 @@ const fetchParticipantTasks = async (background: boolean = false) => {
       index === self.findIndex((t) => t.id === task.id)
     );
     
-    console.log(`Found ${uniqueTasks.length} total unique tasks for user`);
+    if (!background) {
+      console.log(`Found ${uniqueTasks.length} total unique active tasks for user`);
+    }
+    
+    // First get existing task IDs in PowerSync to handle task deletion
+    const existingTasksResult = await powersync.execute('SELECT id FROM tasks');
+    const existingTaskIds = new Set(existingTasksResult.rows?._array.map(row => row.id) || []);
+    
+    // Get IDs of tasks that should be in the database
+    const validTaskIds = new Set(uniqueTasks.map(task => task.id));
     
     // Insert or update these tasks in PowerSync
     for (const task of uniqueTasks) {
@@ -629,6 +586,26 @@ const fetchParticipantTasks = async (background: boolean = false) => {
         task.is_completed ? 1 : 0,
         task.is_postponed ? 1 : 0
       ]);
+      
+      // Remove ID from the existing set as we've handled it
+      existingTaskIds.delete(task.id);
+    }
+    
+    // Optional: Handle removal of tasks that are no longer in the active set
+    // This is needed if we want to auto-remove completed tasks from PowerSync
+    if (!background) {
+      // For a more aggressive cleanup approach, get completed tasks from PowerSync
+      const completedTasksResult = await powersync.execute('SELECT id FROM tasks WHERE is_completed = 1');
+      const completedTaskIds = completedTasksResult.rows?._array.map(row => row.id) || [];
+      
+      if (completedTaskIds.length > 0) {
+        console.log(`Found ${completedTaskIds.length} completed tasks in PowerSync - archiving them`);
+        
+        // Archive completed tasks by moving them to a different table or delete them
+        // For now, we'll just delete them since they're already in Supabase
+        await powersync.execute(`DELETE FROM tasks WHERE is_completed = 1 AND id NOT IN (SELECT id FROM tasks WHERE id IN (?) AND is_completed = 0)`, 
+          [completedTaskIds.join(',')]);
+      }
     }
   } catch (error) {
     console.error("Error syncing tasks:", error);
@@ -650,7 +627,13 @@ export const completeTask = async (id: string): Promise<boolean> => {
 
     const now = new Date().toISOString();
     
-    // Update in Supabase first to ensure data consistency - use integer 1 instead of boolean true
+    // First update in local PowerSync database for immediate UI response
+    const sql = "UPDATE tasks SET is_completed = 1, completed_at = ? WHERE id = ?";
+    await powersync.execute(sql, [now, id]);
+    
+    console.log(`✅ Task ${id} marked as completed in PowerSync at ${now}`);
+    
+    // Then update in Supabase to ensure data consistency
     const { error } = await supabase
       .from('tasks')
       .update({ 
@@ -661,23 +644,30 @@ export const completeTask = async (id: string): Promise<boolean> => {
       
     if (error) {
       console.error("Failed to update task in Supabase:", error);
-      return false;
+      // If Supabase update fails, we may need to revert the local update
+      // but it's better to keep the task marked as completed locally and retry the sync later
+      return true; // Still return true since local update succeeded
     }
     
-    // Then update in local PowerSync database
-    const sql = "UPDATE tasks SET is_completed = 1, completed_at = ? WHERE id = ?";
-    await powersync.execute(sql, [now, id]);
+    console.log(`✅ Task ${id} completed successfully in Supabase at ${now}`);
     
-    console.log(`✅ Task ${id} completed successfully at ${now}`);
-    
-    // Fetch participant tasks to ensure all users get the updated task state
-    await fetchParticipantTasks();
-    
-    // Force a refresh of the tasks to ensure they're in sync
-    setTimeout(() => {
-      console.log("🔄 Triggering task refresh after completion");
-      fetchParticipantTasks();
-    }, 1000);
+    // After a short delay, REMOVE the task from PowerSync to avoid sync loop issues
+    // This is safe because the task is already marked as completed in Supabase
+    setTimeout(async () => {
+      try {
+        // Verify that the task is still marked as completed before removing it
+        const result = await powersync.execute("SELECT is_completed FROM tasks WHERE id = ?", [id]);
+        const isStillCompleted = result.rows?._array[0]?.is_completed === 1;
+        
+        if (isStillCompleted) {
+          console.log(`🗑️ Removing completed task ${id} from PowerSync to prevent sync loops`);
+          await powersync.execute("DELETE FROM tasks WHERE id = ?", [id]);
+        }
+      } catch (err) {
+        console.error(`Error removing completed task ${id}:`, err);
+        // This is non-critical, so we continue
+      }
+    }, 5000); // Wait 5 seconds to ensure any UI transitions have completed
     
     return true;
   } catch (error: any) {
@@ -912,8 +902,8 @@ const convertTaskFromDatabase = (row: any): Task => {
     title: row.title,
     description: row.description,
     priority: row.priority,
-    isCompleted: Boolean(row.is_completed),
-    isPostponed: Boolean(row.is_postponed),
+    isCompleted: row.is_completed === 1 || false,
+    isPostponed: row.is_postponed === 1 || false,
     postponedCount: row.postponed_count,
     createdAt: row.created_at,
     completedAt: row.completed_at,
@@ -957,7 +947,7 @@ export const useTasks = () => {
         // Run in the background without setting loading state to true
         fetchParticipantTasks(true);
       }
-    }, 30000); // Reduced to once every 30 seconds instead of 10 seconds
+    }, 30000);
     
     const initTasks = async () => {
       try {
