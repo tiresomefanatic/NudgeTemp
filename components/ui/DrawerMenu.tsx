@@ -15,7 +15,7 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
-const DRAWER_WIDTH = width * 0.60; // 25% of screen width
+const DRAWER_WIDTH = width * 0.60; // 60% of screen width
 
 interface DrawerMenuProps {
   visible: boolean;
@@ -145,12 +145,12 @@ const styles = StyleSheet.create({
     left: 0,
     width: DRAWER_WIDTH,
     height: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFF',
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   menuItems: {
     flex: 1,
