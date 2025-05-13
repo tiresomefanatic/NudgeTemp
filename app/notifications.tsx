@@ -96,9 +96,10 @@ interface NotificationCardProps {
   notification: Notification;
   onDismiss: (id: string) => void;
   onDone: (id: string) => void;
+  backgroundColor?: string;
 }
 
-const NotificationCard = ({ notification, onDismiss, onDone }: NotificationCardProps) => {
+const NotificationCard = ({ notification, onDismiss, onDone, backgroundColor }: NotificationCardProps) => {
   // Animation values for swipe
   const position = new Animated.ValueXY();
   const opacity = new Animated.Value(1);
@@ -160,6 +161,7 @@ const NotificationCard = ({ notification, onDismiss, onDone }: NotificationCardP
         {
           transform: [{ translateX: position.x }],
           opacity: opacity,
+          backgroundColor: backgroundColor || '#FFF',
         }
       ]}
       {...panResponder.panHandlers}
@@ -365,6 +367,7 @@ export default function NotificationsScreen() {
                       notification={notification}
                       onDismiss={handleDismiss}
                       onDone={handleDone}
+                      backgroundColor="#E9EAEC"
                     />
                   </View>
                 );
