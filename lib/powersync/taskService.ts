@@ -769,79 +769,130 @@ export const clearAllTasks = async (): Promise<void> => {
   try {
     // First clear from PowerSync to stop any sync attempts
     console.log("Deleting all tasks from PowerSync...");
-    await powersync.execute("DELETE FROM tasks");
-    await powersync.disconnect();
+    try {
+      await powersync.execute("DELETE FROM tasks");
+      console.log("✓ Tasks table cleared");
+    } catch (e) {
+      console.log("⚠️ Error clearing tasks table:", e);
+    }
+    
+    // Make sure we're disconnected from PowerSync
+    console.log("Disconnecting from PowerSync...");
+    try {
+      await powersync.disconnect();
+      console.log("✓ PowerSync disconnected");
+    } catch (e) {
+      console.log("⚠️ Error disconnecting from PowerSync:", e);
+    }
     
     // Wait a moment to ensure any in-progress syncs complete
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Then clear from Supabase
-    console.log("Deleting all participants from Supabase...");
-    await supabase
-      .from('participants')
-      .delete()
-      .neq('id', 0); // Delete all participants
+    // Delete all data from Supabase
+    try {
+      console.log("Deleting all participants from Supabase...");
+      await supabase
+        .from('participants')
+        .delete()
+        .neq('id', 0);
+      
+      console.log("Deleting all activities from Supabase...");
+      await supabase
+        .from('activities')
+        .delete()
+        .neq('id', 0);
+      
+      console.log("Deleting all notifications from Supabase...");
+      await supabase
+        .from('notifications')
+        .delete()
+        .neq('id', 0);
+      
+      console.log("Deleting all tasks from Supabase...");
+      await supabase
+        .from('tasks')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+        
+      console.log("✓ All data deleted from Supabase");
+    } catch (e) {
+      console.log("⚠️ Error clearing Supabase data:", e);
+    }
     
-    console.log("Deleting all activities from Supabase...");
-    await supabase
-      .from('activities')
-      .delete()
-      .neq('id', 0); // Delete all activities
-    
-    console.log("Deleting all notifications from Supabase...");
-    await supabase
-      .from('notifications')
-      .delete()
-      .neq('id', 0); // Delete all notifications
-    
-    console.log("Deleting all tasks from Supabase...");
-    await supabase
-      .from('tasks')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all tasks
-    
-    // COMPLETE RESET: Delete the PowerSync database file
+    // COMPLETE RESET: Delete the PowerSync database file using multiple approaches
     try {
       console.log("🗑️ Deleting PowerSync database file to clear all pending sync operations...");
-      // Access internal properties safely - this is a workaround
-      const dbFilename = (powersync as any)._settings?.database?.dbFilename || 'nudge_tasks.db';
+      
+      // Try multiple methods to locate and delete the database file
       const FileSystem = require('expo-file-system');
-      const dbPath = `${FileSystem.documentDirectory}SQLite/${dbFilename}`;
-      await FileSystem.deleteAsync(dbPath, { idempotent: true });
-      console.log("✅ Successfully deleted PowerSync database file");
+      
+      // Method 1: Try using internal _settings (most direct)
+      try {
+        const dbFilename = (powersync as any)._settings?.database?.dbFilename || 'nudge_tasks.db';
+        const dbPath = `${FileSystem.documentDirectory}SQLite/${dbFilename}`;
+        await FileSystem.deleteAsync(dbPath, { idempotent: true });
+        console.log("✓ Database file deleted using method 1");
+      } catch (err) {
+        console.log("Method 1 failed:", err);
+      }
+      
+      // Method 2: Try fixed path with known filename
+      try {
+        const dbPath = `${FileSystem.documentDirectory}SQLite/nudge_tasks.db`;
+        await FileSystem.deleteAsync(dbPath, { idempotent: true });
+        console.log("✓ Database file deleted using method 2");
+      } catch (err) {
+        console.log("Method 2 failed:", err);
+      }
+      
+      // Method 3: Try deleting the entire SQLite directory
+      try {
+        const sqliteDir = `${FileSystem.documentDirectory}SQLite`;
+        await FileSystem.deleteAsync(sqliteDir, { idempotent: true });
+        console.log("✓ Entire SQLite directory deleted");
+      } catch (err) {
+        console.log("Method 3 failed:", err);
+      }
+      
+      console.log("✅ Database file deletion attempts completed");
     } catch (e) {
       console.log("⚠️ Could not delete database file:", e);
     }
     
     // Check if we have a user with ID 1 in Supabase (solves foreign key constraint issues)
     console.log("👤 Checking if user with ID 1 exists in Supabase...");
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', 1)
-      .single();
-      
-    if (userError) {
-      console.log("⚠️ No user with ID 1 found - creating one to fix foreign key constraints");
-      const { error: insertError } = await supabase
+    try {
+      const { data: userData, error: userError } = await supabase
         .from('users')
-        .insert({
-          id: 1,
-          first_name: 'System',
-          last_name: 'User',
-          email: 'system@example.com'
-        });
+        .select('*')
+        .eq('id', 1)
+        .single();
         
-      if (insertError) {
-        console.error("❌ Error creating user:", insertError);
+      if (userError) {
+        console.log("⚠️ No user with ID 1 found - creating one to fix foreign key constraints");
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: 1,
+            first_name: 'System',
+            last_name: 'User',
+            email: 'system@example.com'
+          });
+          
+        if (insertError) {
+          console.error("❌ Error creating user:", insertError);
+        } else {
+          console.log("✅ User with ID 1 created successfully");
+        }
       } else {
-        console.log("✅ User with ID 1 created successfully");
+        console.log("✅ User with ID 1 already exists:", userData);
       }
-    } else {
-      console.log("✅ User with ID 1 already exists:", userData);
+    } catch (e) {
+      console.log("⚠️ Error checking/creating user:", e);
     }
     
     console.log("✅ All tasks and related data deleted successfully");
+    console.log("⚠️ IMPORTANT: You must RESTART THE APP to complete the reset process");
     
     // Force app to reload data after a short delay
     setTimeout(() => {
