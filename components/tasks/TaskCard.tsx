@@ -138,31 +138,29 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style, prefetchedParticipants
       );
     }
 
-    if (participants.length === 0) {
+    // Only show collaborator avatar if there is a participant who is NOT the owner
+    const otherParticipants = participants.filter(p => p.user_id !== creator?.id);
+    if (otherParticipants.length === 0) {
+      // Only owner
       return (
         <View style={styles.avatarStack}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {getUserInitial(creator)}
-            </Text>
+            <Text style={styles.avatarText}>{getUserInitial(creator)}</Text>
           </View>
         </View>
       );
     }
-
-    // Show at most 2 avatars stacked
+    // Owner + first collaborator
     return (
       <View style={styles.avatarStack}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{getUserInitial(creator)}</Text>
         </View>
-        {participants.length > 0 && (
-          <View style={styles.greenAvatarStacked}>
-            <Text style={styles.greenAvatarText}>
-              {getParticipantInitial(participants[0])}
-            </Text>
-          </View>
-        )}
+        <View style={styles.greenAvatarStacked}>
+          <Text style={styles.greenAvatarText}>
+            {getParticipantInitial(otherParticipants[0])}
+          </Text>
+        </View>
       </View>
     );
   };
