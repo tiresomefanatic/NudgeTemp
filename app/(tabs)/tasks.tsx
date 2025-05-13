@@ -267,7 +267,7 @@ export default function TasksScreen() {
         <View style={styles.customHeader}>
           <TouchableOpacity style={styles.headerIconLeft} onPress={toggleDrawer}>
             <Image
-              source={require("@/assets/icons/hamburger.png")}
+              source={drawerVisible ? require("@/assets/icons/BackArrow.png") : require("@/assets/icons/hamburger.png")}
               style={{ width: 32, height: 32 }}
               resizeMode="contain"
             />
@@ -466,9 +466,9 @@ const styles = StyleSheet.create({
   },
   nudgeFab: {
     position: 'absolute',
-    bottom: 38,
+    bottom: 54,
     left: '50%',
-    marginLeft: -24, // Half the width to center it
+    marginLeft: -24,
     width: 48,
     height: 48,
     padding: 12,
