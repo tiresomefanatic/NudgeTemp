@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
   noContributorsText: {
     color: '#868B97',
     fontStyle: 'italic',
-    marginLeft: 10,
+    marginLeft: 0,
   },
 });
 
