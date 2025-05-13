@@ -23,6 +23,7 @@ interface PowerSyncAppContextType {
   };
   offlineMode: boolean;
   toggleOfflineMode: () => void;
+  resetPowerSync: () => Promise<boolean>;
 }
 
 const PowerSyncAppContext = createContext<PowerSyncAppContextType>({
@@ -36,6 +37,7 @@ const PowerSyncAppContext = createContext<PowerSyncAppContextType>({
   },
   offlineMode: false,
   toggleOfflineMode: () => {},
+  resetPowerSync: async () => false,
 });
 
 // Get the PowerSync URL from environment
@@ -293,6 +295,44 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Function to reset PowerSync database (can be called after deleting the database file)
+  const resetPowerSync = async (): Promise<boolean> => {
+    console.log("🔄 Attempting to reset PowerSync connection...");
+    try {
+      // First disconnect
+      console.log("1️⃣ Disconnecting from PowerSync...");
+      await powersync.disconnect();
+      
+      // Clear any pending sync intervals
+      if (uploadIntervalRef.current) {
+        clearTimeout(uploadIntervalRef.current);
+        uploadIntervalRef.current = null;
+      }
+      
+      // Reset connector
+      console.log("2️⃣ Resetting PowerSync connector...");
+      const connector = new SupabaseConnector(POWERSYNC_URL);
+      connector.setOfflineMode(offlineMode);
+      connectorRef.current = connector;
+      
+      // Reset all state
+      setIsInitialized(true);
+      setIsConnected(true);
+      setSyncErrorCount(0);
+      setSyncInterval(5000);
+      
+      // Start fresh sync cycle
+      console.log("3️⃣ Starting fresh sync cycle...");
+      uploadPendingChanges();
+      
+      console.log("✅ PowerSync connection reset successfully");
+      return true;
+    } catch (error) {
+      console.error("❌ Error resetting PowerSync:", error);
+      return false;
+    }
+  };
+
   return (
     <PowerSyncAppContext.Provider
       value={{
@@ -306,6 +346,7 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
         },
         offlineMode,
         toggleOfflineMode,
+        resetPowerSync,
       }}
     >
       {children}
