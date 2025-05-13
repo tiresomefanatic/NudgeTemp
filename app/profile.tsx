@@ -30,8 +30,8 @@ export default function ProfileScreen() {
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.nudgeTitle}>profile</Text>
+          <View style={styles.headerTitleLeft}>
+            <Text style={styles.headerTitle}>profile</Text>
           </View>
         </View>
       </RNSafeAreaView>
@@ -70,26 +70,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitleContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+  headerTitleLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    pointerEvents: 'none',
+    marginLeft: 8,
+    flex: 1,
   },
-  nudgeTitle: {
+  headerTitle: {
     fontFamily: 'Sharpie',
     fontWeight: '400',
     fontSize: 32,
     lineHeight: 32,
     letterSpacing: 0.15,
-    textAlign: 'center',
     color: '#3800FF',
-    flex: 1,
-    width: '100%',
   },
   content: {
     flex: 1,
