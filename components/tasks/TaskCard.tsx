@@ -276,7 +276,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style, prefetchedParticipants
         <View style={{ height: 4 }} />
         <Text style={styles.updatedDetailsText}>
           {task.description ||
-            "Find hotels for 3 days in Jakarta and 5 days in Bali. Check out cheap ticket options to fly down"}
+            ""}
         </Text>
 
         {/* Collaborators section */}
