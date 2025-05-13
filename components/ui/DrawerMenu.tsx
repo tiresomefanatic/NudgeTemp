@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { useAuth } from '@/lib/auth/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
-const DRAWER_WIDTH = width * 0.30; // 25% of screen width
+const DRAWER_WIDTH = width * 0.60; // 25% of screen width
 
 interface DrawerMenuProps {
   visible: boolean;
@@ -22,6 +24,7 @@ interface DrawerMenuProps {
 
 const DrawerMenu: React.FC<DrawerMenuProps> = ({ visible, onClose }) => {
   const translateX = new Animated.Value(visible ? 0 : -DRAWER_WIDTH);
+  const { signOut } = useAuth();
 
   useEffect(() => {
     Animated.timing(translateX, {
@@ -39,6 +42,16 @@ const DrawerMenu: React.FC<DrawerMenuProps> = ({ visible, onClose }) => {
 
   const handleOverlayPress = () => {
     onClose();
+  };
+
+  const handleLogout = async () => {
+    try {
+      Haptics.selectionAsync();
+      onClose();
+      await signOut();
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
   };
 
   if (!visible) return null;
@@ -92,6 +105,16 @@ const DrawerMenu: React.FC<DrawerMenuProps> = ({ visible, onClose }) => {
             <Text style={styles.menuItemText}>Archive</Text>
           </TouchableOpacity>
         </View>
+        
+        <View style={styles.logoutContainer}>
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={handleLogout}
+          >
+            <Ionicons name="log-out-outline" size={24} color="#3800FF" style={styles.menuIcon} />
+            <Text style={styles.menuItemText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </Animated.View>
     </View>
   );
@@ -132,7 +155,12 @@ const styles = StyleSheet.create({
   menuItems: {
     flex: 1,
     justifyContent: 'center', // Center vertically
+    alignItems: 'center',
     paddingHorizontal: 10,
+  },
+  logoutContainer: {
+    paddingBottom: 40,
+    alignItems: 'center',
   },
   menuItem: {
     paddingVertical: 15,
