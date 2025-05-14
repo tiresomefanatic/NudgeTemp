@@ -142,45 +142,9 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
 
       console.log(`🔄 Processing ${transaction.crud.length} operations`);
 
-      // Keep track of tasks that have been completed in Supabase
-      const completedTasksCache = new Set<string>();
-      
-      // First check if any of the operations involve completed tasks
-      for (const op of transaction.crud) {
-        if (op.op === UpdateType.PUT || op.op === UpdateType.PATCH) {
-          const record = { ...op.opData } as any;
-          
-          // Skip unnecessary re-syncing of already completed tasks
-          if (record.is_completed === 1 || record.is_completed === true) {
-            try {
-              // Check if the task is already completed in Supabase
-              const { data, error } = await supabase
-                .from("tasks")
-                .select("is_completed")
-                .eq("id", op.id)
-                .single();
-                
-              if (!error && data && (data.is_completed === 1 || data.is_completed === true)) {
-                // Task is already completed in Supabase, add to cache
-                completedTasksCache.add(op.id);
-                console.log(`⏭️ Task ${op.id} is already completed in Supabase, skipping resync`);
-              }
-            } catch (error) {
-              console.log(`Error checking completion state for ${op.id}:`, error);
-            }
-          }
-        }
-      }
-
       // Process all operations in the transaction
       for (const op of transaction.crud) {
         try {
-          // Skip if this is a completed task we've already verified in Supabase
-          if (completedTasksCache.has(op.id)) {
-            console.log(`⏭️ Skipping resync of completed task: ${op.id}`);
-            continue;
-          }
-
           // The data that needs to be changed in Supabase
           const record = { ...op.opData, id: op.id } as any; // Use any to allow property access
 

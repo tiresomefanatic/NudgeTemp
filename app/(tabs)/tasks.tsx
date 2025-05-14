@@ -391,7 +391,7 @@ export default function TasksScreen() {
         </View>
       )}
 
-       <View style={styles.footer}>
+       {/* <View style={styles.footer}>
         <TouchableOpacity
           style={styles.resetButton}
           onPress={navigateToResetScreen}
@@ -399,7 +399,7 @@ export default function TasksScreen() {
           <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
           <Text style={styles.resetButtonText}>Reset Database</Text>
         </TouchableOpacity>
-      </View> 
+      </View>  */}
 
       {/* Add Task Button */}
       {!showAddCard && (
