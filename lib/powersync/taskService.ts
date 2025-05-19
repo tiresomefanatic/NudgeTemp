@@ -43,10 +43,12 @@ export const toAppTask = (record: TaskRecord): Task => {
     priority: (record.priority as "high" | "medium" | "low") || "medium",
     isCompleted: record.is_completed === 1 || false,
     isPostponed: record.is_postponed === 1 || false,
+    isArchived: record.is_archived === 1 || false,
     postponedCount: record.postponed_count || 0,
     createdAt: record.created_at || new Date().toISOString(),
     completedAt: record.completed_at || null,
     postponedAt: record.postponed_at || null,
+    archivedAt: record.archived_at || null,
     creatorId: record.creator_id || null,
     category: record.category || null,
   };
@@ -496,12 +498,13 @@ const fetchParticipantTasks = async (background: boolean = false) => {
     // For active tasks view, we only need active tasks from Supabase
     // This doesn't delete or affect completed tasks in Supabase
     
-    // Get active tasks created by this user (not completed)
+    // Get active tasks created by this user (not completed and not archived)
     const { data: creatorTasks, error: creatorError } = await supabase
       .from('tasks')
       .select('*')
       .eq('creator_id', userId)
-      .eq('is_completed', 0); // Only get active tasks
+      .eq('is_completed', 0) // Only get active tasks
+      .eq('is_archived', 0); // Don't get archived tasks
       
     if (creatorError) {
       console.error("Error fetching creator tasks:", creatorError);
@@ -538,7 +541,8 @@ const fetchParticipantTasks = async (background: boolean = false) => {
           .from('tasks')
           .select('*')
           .in('id', participantTaskIds)
-          .eq('is_completed', 0); // Only get active tasks
+          .eq('is_completed', 0) // Only get active tasks
+          .eq('is_archived', 0); // Don't get archived tasks
           
         if (tasksError) {
           console.error("Error fetching participant tasks:", tasksError);
@@ -566,8 +570,8 @@ const fetchParticipantTasks = async (background: boolean = false) => {
       await powersync.execute(`
         INSERT OR REPLACE INTO tasks (
           id, title, description, priority, created_at, completed_at, postponed_at, 
-          postponed_count, creator_id, category, is_completed, is_postponed
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          postponed_count, creator_id, category, is_completed, is_postponed, is_archived, archived_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         task.id,
         task.title,
@@ -580,7 +584,9 @@ const fetchParticipantTasks = async (background: boolean = false) => {
         task.creator_id,
         task.category,
         task.is_completed ? 1 : 0,
-        task.is_postponed ? 1 : 0
+        task.is_postponed ? 1 : 0,
+        task.is_archived ? 1 : 0,
+        task.archived_at || null
       ]);
     }
     
@@ -866,10 +872,12 @@ const convertTaskFromDatabase = (row: any): Task => {
     priority: row.priority,
     isCompleted: row.is_completed === 1 || false,
     isPostponed: row.is_postponed === 1 || false,
+    isArchived: row.is_archived === 1 || false,
     postponedCount: row.postponed_count,
     createdAt: row.created_at,
     completedAt: row.completed_at,
     postponedAt: row.postponed_at,
+    archivedAt: row.archived_at,
     creatorId: row.creator_id,
     category: row.category,
   };
@@ -884,7 +892,7 @@ export const useTasks = () => {
   // SQL query for active tasks, ordered by priority
   const activeTasksQuery = `
     SELECT * FROM tasks 
-    WHERE is_completed = 0 
+    WHERE is_completed = 0 AND is_archived = 0
     ORDER BY 
       is_postponed ASC,
       CASE priority 
@@ -1453,4 +1461,210 @@ export const debugTaskParticipants = async (taskId: string): Promise<void> => {
   } catch (error) {
     console.error('Error in debugTaskParticipants:', error);
   }
+};
+
+// Mark a task as archived
+export const archiveTask = async (id: string): Promise<boolean> => {
+  console.log("📁 Archiving task:", id);
+  try {
+    // First check if current user is the task owner
+    const userRole = await getCurrentUserRoleForTask(id);
+    console.log(`User role for task ${id}: ${userRole}`);
+    
+    if (userRole !== 'owner') {
+      console.error("❌ Only task owners can archive tasks");
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    
+    // Update in Supabase to ensure data consistency
+    const { error } = await supabase
+      .from('tasks')
+      .update({ 
+        is_archived: 1, 
+        archived_at: now 
+      })
+      .eq('id', id);
+      
+    if (error) {
+      console.error("Failed to archive task in Supabase:", error);
+      return false;
+    }
+    
+    console.log(`📁 Task ${id} archived in Supabase at ${now}`);
+    
+    // Then update in local PowerSync database for immediate UI response
+    const sql = "UPDATE tasks SET is_archived = 1, archived_at = ? WHERE id = ?";
+    await powersync.execute(sql, [now, id]);
+    
+    console.log(`📁 Task ${id} also archived in PowerSync`);
+    
+    return true;
+  } catch (error: any) {
+    console.error(
+      "❌ Failed to archive task:",
+      error?.message || "Unknown error"
+    );
+    throw error;
+  }
+};
+
+// Hook to fetch archived tasks
+export const useArchivedTasks = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  
+  useEffect(() => {
+    console.log("🔍 Setting up archived tasks watcher...");
+    let isMounted = true;
+    
+    // Function to set up watchers for archived tasks
+    const setupWatcher = async () => {
+      try {
+        // Get all archived tasks, whether completed or not
+        const sql = `
+          SELECT * FROM tasks 
+          WHERE is_archived = 1
+          ORDER BY archived_at DESC
+        `;
+        
+        // First get tasks from PowerSync directly
+        const result = await powersync.execute(sql);
+        
+        // Extract and convert tasks from the result
+        if (result.rows?._array && isMounted) {
+          const archivedTasks = result.rows._array.map(toAppTask);
+          console.log("📁 Found", archivedTasks.length, "archived tasks in PowerSync");
+          setTasks(archivedTasks);
+        }
+        
+        // Also try to fetch tasks from Supabase to ensure all archived tasks are retrieved
+        const { data: supabaseArchivedTasks, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('is_archived', 1)
+          .order('archived_at', { ascending: false });
+          
+        if (error) {
+          console.error("Error fetching archived tasks from Supabase", error);
+        } else if (supabaseArchivedTasks?.length && isMounted) {
+          console.log("📁 Found", supabaseArchivedTasks.length, "archived tasks in Supabase");
+          
+          // Convert to app task format
+          const convertedTasks = supabaseArchivedTasks.map(task => ({
+            id: task.id,
+            title: task.title || "",
+            description: task.description || "",
+            priority: (task.priority as "high" | "medium" | "low") || "medium",
+            isCompleted: Boolean(task.is_completed),
+            isPostponed: Boolean(task.is_postponed),
+            isArchived: true, // These are all archived
+            postponedCount: task.postponed_count || 0,
+            createdAt: task.created_at || new Date().toISOString(),
+            completedAt: task.completed_at || null,
+            postponedAt: task.postponed_at || null,
+            archivedAt: task.archived_at || null,
+            creatorId: task.creator_id || null,
+            category: task.category || null,
+          }));
+          
+          // Merge with existing tasks, removing duplicates
+          const allTaskIds = new Set(tasks.map(task => task.id));
+          const uniqueTasks = convertedTasks.filter(task => !allTaskIds.has(task.id));
+          
+          if (uniqueTasks.length) {
+            console.log("📁 Adding", uniqueTasks.length, "unique archived tasks from Supabase");
+            
+            // Insert these tasks into PowerSync
+            for (const task of uniqueTasks) {
+              await powersync.execute(`
+                INSERT OR REPLACE INTO tasks (
+                  id, title, description, priority, created_at, completed_at, postponed_at, 
+                  postponed_count, creator_id, category, is_completed, is_postponed, is_archived, archived_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                task.id,
+                task.title,
+                task.description,
+                task.priority,
+                task.createdAt,
+                task.completedAt,
+                task.postponedAt,
+                task.postponedCount || 0,
+                task.creatorId,
+                task.category,
+                task.isCompleted ? 1 : 0,
+                task.isPostponed ? 1 : 0,
+                1, // is_archived is always 1 for these tasks
+                task.archivedAt
+              ]);
+            }
+            
+            // Now get all archived tasks from PowerSync after syncing
+            const updatedResult = await powersync.execute(sql);
+            if (updatedResult.rows?._array && isMounted) {
+              const updatedTasks = updatedResult.rows._array.map(toAppTask);
+              console.log("✅ Now found", updatedTasks.length, "archived tasks after Supabase sync");
+              setTasks(updatedTasks);
+            }
+          }
+        }
+        
+        // Set loading to false after both PowerSync and Supabase checks
+        if (isMounted) {
+          setLoading(false);
+        }
+        
+        // Set up watcher for changes
+        const watcher = powersync.watch(sql);
+        
+        // Create async iterator
+        const iterator = watcher[Symbol.asyncIterator]();
+        
+        // Poll for changes
+        const poll = async () => {
+          try {
+            const { value } = await iterator.next();
+            
+            if (value && isMounted) {
+              const watchedTasks = value.rows._array.map(toAppTask);
+              setTasks(watchedTasks);
+              console.log("📊 Updated archived tasks list:", watchedTasks.length, "tasks");
+            }
+            
+            if (isMounted) {
+              setTimeout(poll, POLL_INTERVAL_MS);
+            }
+          } catch (err: any) {
+            if (isMounted) {
+              console.error("Error in archived tasks watcher:", err);
+              setError(err);
+              // Try to restart polling after a delay
+              setTimeout(poll, POLL_INTERVAL_MS * 5);
+            }
+          }
+        };
+        
+        // Start polling
+        poll();
+        
+      } catch (err: any) {
+        console.error("Failed to set up archived tasks watcher:", err);
+        if (isMounted) {
+          setError(err);
+          setLoading(false);
+        }
+      }
+    };
+    
+    setupWatcher();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+  
+  return { tasks, loading, error };
 };

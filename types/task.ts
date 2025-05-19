@@ -5,10 +5,12 @@ export interface Task {
   priority?: 'low' | 'medium' | 'high';
   isCompleted?: boolean;
   isPostponed?: boolean;
+  isArchived?: boolean;
   postponedCount?: number;
   createdAt?: string;
   completedAt?: string | null;
   postponedAt?: string | null;
+  archivedAt?: string | null;
   creatorId?: number | null;
   category?: string | null;
 }

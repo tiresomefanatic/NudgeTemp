@@ -32,6 +32,7 @@ const CARD_WIDTH = width * 0.85;
 // Constants for swipe thresholds
 const SWIPE_THRESHOLD = width * 0.25;
 const SWIPE_UP_THRESHOLD = height * 0.15; // Threshold for upward swipe (nudge)
+const SWIPE_DOWN_THRESHOLD = height * 0.15;
 const ROTATION_ANGLE = 8;
 const SPRING_CONFIG = { damping: 15, stiffness: 150 };
 
@@ -39,7 +40,8 @@ interface TaskDeckProps {
   tasks: Task[];
   onComplete: (task: Task) => void;
   onPostpone: (task: Task) => void;
-  onNudge?: (task: Task) => void; // New callback for nudge action
+  onNudge?: (task: Task) => void; // Callback for nudge action
+  onArchive?: (task: Task) => void; // Callback for archive action
   onFinish?: () => void;
   addTaskCardProps?: any; // Props for AddTaskCard, if present
 }
@@ -49,6 +51,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   onComplete,
   onPostpone,
   onNudge,
+  onArchive,
   onFinish,
   addTaskCardProps,
 }) => {
@@ -108,6 +111,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
   const upSwipeOverlayOpacity = position.y.interpolate({
     inputRange: [-SWIPE_UP_THRESHOLD * 1.5, -SWIPE_UP_THRESHOLD * 0.5],
     outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  
+  // Add overlay opacity for downward swipe (archive)
+  const downSwipeOverlayOpacity = position.y.interpolate({
+    inputRange: [SWIPE_DOWN_THRESHOLD * 0.5, SWIPE_DOWN_THRESHOLD * 1.5],
+    outputRange: [0, 1],
     extrapolate: 'clamp',
   });
 
@@ -419,9 +429,56 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     });
   }, [secondCardScale, secondCardTranslateY, thirdCardScale, thirdCardTranslateY]);
 
-  // Modified completeSwipe to use the stack promotion animation
+  // Add a function to check if user can archive the task (only owners can archive)
+  const canArchiveTask = useCallback((taskId: string) => {
+    return userRoles[taskId] === 'owner';
+  }, [userRoles]);
+
+  // Function to handle when a card is swiped down (archived)
+  const handleSwipedDown = useCallback((index: number) => {
+    // Check if the onArchive callback exists before calling it
+    if (!onArchive) return;
+    
+    const taskToArchive = activeTasks[index];
+    
+    // Archive the task
+    onArchive(taskToArchive);
+    
+    // Update the active tasks array to remove the archived task
+    setActiveTasks(currentTasks => {
+      // Create a copy of the tasks
+      const updatedTasks = [...currentTasks];
+      // Remove the archived task
+      if (index < updatedTasks.length) {
+        updatedTasks.splice(index, 1);
+      }
+      return updatedTasks;
+    });
+    
+    // Update the current index to show the next task
+    setCardIndex(prevIndex => {
+      const newIndex = prevIndex;
+      
+      // Log to confirm we're showing the right data for the next card
+      const nextTaskId = activeTasks[newIndex]?.id;
+      if (nextTaskId && nextTaskId !== 'add') {
+        console.log(`Next card will be task ${nextTaskId} - using prefetched data`);
+      }
+      
+      return newIndex;
+    });
+    
+    // Reset animation states after all state updates
+    setIsSwipeAnimating(false);
+    animatingCardIndex.current = -1;
+    
+    // Return to center position smoothly
+    position.setValue({ x: 0, y: 0 });
+  }, [activeTasks, onArchive]);
+
+  // Modified completeSwipe to include downward swipe
   const completeSwipe = useCallback(
-    async (direction: 'left' | 'right', index: number, gesture: { dx: number, dy: number }) => {
+    async (direction: 'left' | 'right' | 'down', index: number, gesture: { dx: number, dy: number }) => {
       if (isSwipeAnimating) return;
       
       const task = activeTasks[index];
@@ -433,14 +490,31 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         return;
       }
       
+      // Check permissions for down swipe (archive)
+      if (direction === 'down' && !canArchiveTask(task.id)) {
+        // User is not allowed to archive this task, reset position
+        resetPosition();
+        return;
+      }
+      
       setIsSwipeAnimating(true);
       animatingCardIndex.current = index;
 
       // Animate outgoing card
-      const targetX = direction === 'left' ? -width * 1.5 : width * 1.5;
+      let targetX = 0;
+      let targetY = 0;
+      
+      if (direction === 'left' || direction === 'right') {
+        targetX = direction === 'left' ? -width * 1.5 : width * 1.5;
+        targetY = gesture.dy;
+      } else if (direction === 'down') {
+        targetX = gesture.dx;
+        targetY = height * 1.5;
+      }
+      
       await new Promise<void>((resolve) => {
         Animated.timing(position, {
-          toValue: { x: targetX, y: gesture.dy },
+          toValue: { x: targetX, y: targetY },
           duration: 200,
           useNativeDriver: true,
         }).start(() => {
@@ -459,10 +533,12 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       // Update state after animation is complete
       if (direction === 'left') {
         handleSwipedLeft(index);
-      } else {
+      } else if (direction === 'right') {
         handleSwipedRight(index);
+      } else if (direction === 'down') {
+        handleSwipedDown(index);
       }
-    }, [isSwipeAnimating, position, activeTasks, cardIndex, handleSwipedLeft, handleSwipedRight, animateStackPromotion, canCompleteTask]);
+    }, [isSwipeAnimating, position, activeTasks, cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedDown, canCompleteTask, canArchiveTask]);
 
   // Create pan responder for swipe gestures
   const panResponder = useMemo(() => PanResponder.create({
@@ -485,6 +561,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         return !!(onNudge && (
           canNudgeTask(currentTask.id) || 
           (loadingRoles && currentTask.creatorId !== currentUser?.id)
+        ));
+      }
+      
+      // For downward swipes (archive), check if user is allowed to archive
+      if (gestureState.dy > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx)) {
+        // Allow archiving if:
+        // 1. User has owner role, OR
+        // 2. Roles are still loading and user is the creator (likely an owner)
+        return !!(onArchive && (
+          canArchiveTask(currentTask.id) || 
+          (loadingRoles && currentTask.creatorId === currentUser?.id)
         ));
       }
       
@@ -520,6 +607,17 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           position.setValue({ x: gesture.dx, y });
         }
       } 
+      // For downward movement (archive)
+      else if (gesture.dy > 0 && Math.abs(gesture.dy) > Math.abs(gesture.dx)) {
+        // Allow downward movement if user can archive or if we're still loading roles for the top card
+        if ((onArchive && canArchiveTask(currentTask.id)) || 
+            (loadingRoles && currentTask.creatorId === currentUser?.id)) {
+          // Apply movement constraints to y-axis for better downward swipe behavior
+          const dampenFactor = Math.min(1, Math.abs(gesture.dy) / (height * 0.6));
+          const y = gesture.dy * (1 - (dampenFactor * 0.3));
+          position.setValue({ x: gesture.dx, y });
+        }
+      } 
       // For right movement (complete)
       else if (gesture.dx > 0 && Math.abs(gesture.dx) > Math.abs(gesture.dy)) {
         // Allow rightward movement if user can complete or if we're still loading roles for the top card
@@ -548,6 +646,11 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
       const canNudgeOptimistic = 
         (onNudge && canNudgeTask(currentTask.id)) || 
         (loadingRoles && onNudge && currentTask.creatorId !== currentUser?.id);
+        
+      // Determine if the user can archive using optimistic permissions
+      const canArchiveOptimistic = 
+        (onArchive && canArchiveTask(currentTask.id)) || 
+        (loadingRoles && onArchive && currentTask.creatorId === currentUser?.id);
       
       if (gesture.dx > SWIPE_THRESHOLD && canCompleteOptimistic) {
         // Swiped right - complete (only if user is allowed)
@@ -592,6 +695,9 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
           // Reset opacity for next time
           cardOpacity.setValue(1);
         });
+      } else if (gesture.dy > SWIPE_DOWN_THRESHOLD && canArchiveOptimistic) {
+        // Swiped down - archive (only if user is allowed)
+        completeSwipe('down', cardIndex, gesture);
       } else {
         // Return to center
         resetPosition();
@@ -603,7 +709,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         resetPosition();
       }
     },
-  }), [cardIndex, handleSwipedLeft, handleSwipedRight, handleSwipedUp, onNudge, isSwipeAnimating, completeSwipe, canCompleteTask, canNudgeTask, activeTasks, loadingRoles, currentUser]);
+  }), [isSwipeAnimating, position, activeTasks, cardIndex, cardOpacity, resetPosition, handleSwipedLeft, handleSwipedRight, handleSwipedUp, handleSwipedDown, canCompleteTask, canNudgeTask, canArchiveTask, completeSwipe, loadingRoles, currentUser]);
 
   // Check for postponed tasks in the system
   useEffect(() => {
@@ -797,6 +903,20 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
                       <View style={styles.overlayContent}>
                         <Image source={require('../../assets/icons/NudgeIcon.png')} style={styles.overlayIcon} />
                         <Text style={styles.nudgeText}>Nudge</Text>
+                      </View>
+                    </Animated.View>
+                    
+                    {/* Downward Swipe (Archive) Overlay */}
+                    <Animated.View
+                      style={[
+                        styles.overlayContainer,
+                        styles.downOverlay,
+                        { opacity: downSwipeOverlayOpacity },
+                      ]}
+                    >
+                      <View style={styles.overlayContent}>
+                        <Image source={require('../../assets/icons/ArchiveIcon.png')} style={styles.overlayIcon} />
+                        <Text style={styles.archiveText}>Archive</Text>
                       </View>
                     </Animated.View>
                   </>
@@ -1103,8 +1223,20 @@ const styles = StyleSheet.create({
   upOverlay: {
     backgroundColor: "#1249D333",
   },
+  downOverlay: {
+    backgroundColor: "#3800FF33",
+  },
   nudgeText: {
     color: "#1249D3",
+    textAlign: "center",
+    fontFamily: "Sharpie",
+    fontSize: 36,
+    fontWeight: "600",
+    lineHeight: 36,
+    letterSpacing: 0.15,
+  },
+  archiveText: {
+    color: "#3800FF",
     textAlign: "center",
     fontFamily: "Sharpie",
     fontSize: 36,

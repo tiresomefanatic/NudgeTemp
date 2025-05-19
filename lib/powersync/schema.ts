@@ -17,12 +17,14 @@ const tasks = new Table(
     category: column.text,
     is_completed: column.integer,
     is_postponed: column.integer,
+    is_archived: column.integer,
+    archived_at: column.text,
   },
   { 
     indexes: { 
       priority_idx: ['priority'],
       creator_idx: ['creator_id'],
-      status_idx: ['is_completed', 'is_postponed'],
+      status_idx: ['is_completed', 'is_postponed', 'is_archived'],
       created_idx: ['created_at']
     } 
   }

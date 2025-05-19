@@ -29,6 +29,7 @@ import {
   completeTask,
   postponeTask,
   nudgeTask,
+  archiveTask,
   clearAllTasks,
   debugTaskParticipants,
 } from "@/lib/powersync/taskService";
@@ -120,6 +121,27 @@ export default function TasksScreen() {
     // Just trigger haptic feedback without showing any alert
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // No Alert.alert dialog
+  };
+  
+  const handleArchiveTask = async (task: Task) => {
+    try {
+      const success = await archiveTask(task.id);
+      
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        // Show alert that user is not allowed to archive this task
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert(
+          "Action Not Allowed",
+          "Only the task owner can archive a task.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      console.error("Error archiving task:", error);
+      Alert.alert("Error", "Failed to archive task");
+    }
   };
 
   // Navigate to reset screen
@@ -303,6 +325,7 @@ export default function TasksScreen() {
             onComplete={handleCompleteTask}
             onPostpone={handlePostponeTask}
             onNudge={handleNudgeTask}
+            onArchive={handleArchiveTask}
             onFinish={handleFinishAllTasks}
             addTaskCardProps={showAddCard ? {
               title: addTitle,
