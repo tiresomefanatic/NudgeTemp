@@ -36,6 +36,7 @@ import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
 import { usePowerSyncApp } from "@/lib/powersync/provider";
 import AddTaskCard from "@/components/tasks/AddTaskCard";
 import { useAuth } from "@/lib/auth/AuthContext";
+import DrawerMenu from "@/components/ui/DrawerMenu";
 
 export default function TasksScreen() {
   // Use PowerSync hooks to get tasks
@@ -44,6 +45,9 @@ export default function TasksScreen() {
   const headerHeight = useHeaderHeight();
   const [isClearing, setIsClearing] = useState(false);
   const { signOut } = useAuth();
+  
+  // Add drawer state
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Remove modal state, add inline card state
   const [showAddCard, setShowAddCard] = useState(false);
@@ -62,6 +66,12 @@ export default function TasksScreen() {
       console.error("Error logging out:", error);
       Alert.alert("Error", "Failed to log out. Please try again.");
     }
+  };
+
+  // Toggle drawer
+  const toggleDrawer = () => {
+    Haptics.selectionAsync();
+    setDrawerVisible(!drawerVisible);
   };
 
   const handleCompleteTask = async (task: Task) => {
@@ -187,22 +197,32 @@ export default function TasksScreen() {
   // New handler for AddTaskCard
   const handleCreateTask = async () => {
     if (!addTitle.trim()) return;
+    
+    // Store task data before clearing the form
+    const taskData = {
+      title: addTitle,
+      description: addDetails,
+      priority: "medium" as "medium" | "low" | "high",
+      createdAt: new Date().toISOString(),
+      isCompleted: false,
+      isPostponed: false,
+      postponedCount: 0,
+    };
+    const taskContributorIds = [...contributorIds];
+    
+    // Immediately navigate away for better UX
+    setShowAddCard(false);
+    setAddTitle("");
+    setAddDetails("");
+    setContributorIds([]);
+    
+    // Trigger haptic feedback for immediate response
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
+    // Perform the API call in the background
     setIsSaving(true);
     try {
-      await createTask({
-        title: addTitle,
-        description: addDetails,
-        priority: "medium",
-        createdAt: new Date().toISOString(),
-        isCompleted: false,
-        isPostponed: false,
-        postponedCount: 0,
-      }, contributorIds);
-      setShowAddCard(false);
-      setAddTitle("");
-      setAddDetails("");
-      setContributorIds([]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await createTask(taskData, taskContributorIds);
     } catch (error) {
       Alert.alert("Error", "Failed to create task. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -239,12 +259,15 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
 
+      {/* Drawer Menu */}
+      <DrawerMenu visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+
       {/* Header inside SafeAreaView */}
       <RNSafeAreaView edges={['top']} style={styles.safeHeader}>
         <View style={styles.customHeader}>
-          <TouchableOpacity style={styles.headerIconLeft} onPress={navigateToLaterStack}>
+          <TouchableOpacity style={styles.headerIconLeft} onPress={toggleDrawer}>
             <Image
-              source={require("@/assets/icons/hamburger.png")}
+              source={drawerVisible ? require("@/assets/icons/BackArrow.png") : require("@/assets/icons/hamburger.png")}
               style={{ width: 32, height: 32 }}
               resizeMode="contain"
             />
@@ -253,14 +276,8 @@ export default function TasksScreen() {
             <Text style={styles.nudgeTitle}>nudge</Text>
           </View>
           <View style={styles.headerIconsRight}>
-            <TouchableOpacity>
-              <Image source={require("@/assets/icons/calendar.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
-            </TouchableOpacity>
             <TouchableOpacity onPress={navigateToNotifications}>
               <Image source={require("@/assets/icons/notification-bell.png")} style={{ width: 32, height: 32 }} resizeMode="contain" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <Ionicons name="log-out-outline" size={26} color="#3800FF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -374,7 +391,7 @@ export default function TasksScreen() {
         </View>
       )}
 
-       <View style={styles.footer}>
+       {/* <View style={styles.footer}>
         <TouchableOpacity
           style={styles.resetButton}
           onPress={navigateToResetScreen}
@@ -382,7 +399,7 @@ export default function TasksScreen() {
           <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
           <Text style={styles.resetButtonText}>Reset Database</Text>
         </TouchableOpacity>
-      </View> 
+      </View>  */}
 
       {/* Add Task Button */}
       {!showAddCard && (
@@ -449,9 +466,9 @@ const styles = StyleSheet.create({
   },
   nudgeFab: {
     position: 'absolute',
-    bottom: 38,
+    bottom: 54,
     left: '50%',
-    marginLeft: -24, // Half the width to center it
+    marginLeft: -24,
     width: 48,
     height: 48,
     padding: 12,

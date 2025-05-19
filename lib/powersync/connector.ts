@@ -146,7 +146,7 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       for (const op of transaction.crud) {
         try {
           // The data that needs to be changed in Supabase
-          const record = { ...op.opData, id: op.id };
+          const record = { ...op.opData, id: op.id } as any; // Use any to allow property access
 
           // Log the exact record being sent to Supabase
           console.log(
@@ -160,6 +160,16 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
             case UpdateType.PUT:
               // Create a new record in Supabase
               console.log(`📝 Creating task in Supabase: ${op.id}`);
+              
+              // Make sure is_completed and is_postponed are properly formatted as 1/0 integers
+              // This is important because Supabase stores them as integers but sometimes receives booleans
+              if (record.is_completed !== undefined) {
+                record.is_completed = record.is_completed === true ? 1 : (record.is_completed === false ? 0 : record.is_completed);
+              }
+              if (record.is_postponed !== undefined) {
+                record.is_postponed = record.is_postponed === true ? 1 : (record.is_postponed === false ? 0 : record.is_postponed);
+              }
+              
               result = await supabase.from("tasks").upsert(record);
               if (result.error) {
                 console.error(
@@ -201,6 +211,15 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
             case UpdateType.PATCH:
               // Update an existing record in Supabase
               console.log(`🔄 Updating task in Supabase: ${op.id}`);
+              
+              // Make sure is_completed and is_postponed are properly formatted as 1/0 integers
+              if (record.is_completed !== undefined) {
+                record.is_completed = record.is_completed === true ? 1 : (record.is_completed === false ? 0 : record.is_completed);
+              }
+              if (record.is_postponed !== undefined) {
+                record.is_postponed = record.is_postponed === true ? 1 : (record.is_postponed === false ? 0 : record.is_postponed);
+              }
+              
               result = await supabase
                 .from("tasks")
                 .update(record)

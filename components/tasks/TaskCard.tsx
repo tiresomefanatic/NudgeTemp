@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { StyleSheet, Text, View, Dimensions, ViewStyle, ScrollView, ActivityIndicator } from "react-native";
 import { Task, TaskParticipant } from "../../types/task";
 import { useUser, formatUserName, getUserInitial, User, useCurrentUser } from "@/lib/powersync/userService";
@@ -8,25 +8,47 @@ const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85; // Adjusted to match screenshot
 const CARD_HEIGHT = height * 0.8; // Increased height for more screen usage
 
+// Static star positions and sizes
+const STATIC_STARS = Array(20).fill(null).map((_, i) => ({
+  size: 2 + (i % 3),
+  top: 10 + (i * 6),
+  left: 20 + (i * 18) % CARD_WIDTH,
+}));
+
+// Static tree heights and positions
+const STATIC_TREES = Array(15).fill(null).map((_, i) => ({
+  height: 20 + (i % 5) * 4,
+  left: i * (CARD_WIDTH / 15) + 5,
+}));
+
 interface TaskCardProps {
   task: Task;
   style?: ViewStyle;
+  prefetchedParticipants?: TaskParticipant[];
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, style, prefetchedParticipants }) => {
   const { user: creator, loading: creatorLoading } = useUser(task.creatorId || null);
   const { user: currentUser } = useCurrentUser();
   const [participants, setParticipants] = useState<TaskParticipant[]>([]);
-  const [loadingParticipants, setLoadingParticipants] = useState(true);
+  const [loadingParticipants, setLoadingParticipants] = useState(!prefetchedParticipants);
 
-  // Fetch participants when the task loads
+  // Use prefetched participants data if available, otherwise fetch it
   useEffect(() => {
+    if (prefetchedParticipants) {
+      console.log(`Using prefetched data for task ${task.id} - ${prefetchedParticipants.length} participants`);
+      setParticipants(prefetchedParticipants);
+      setLoadingParticipants(false);
+      return;
+    }
+    
     const fetchParticipants = async () => {
       if (task.id === 'add') {
         setLoadingParticipants(false);
         return;
       }
       
+      console.log(`Fetching participants data for task ${task.id}`);
       try {
         const taskParticipants = await getTaskParticipants(task.id);
         setParticipants(taskParticipants);
@@ -38,57 +60,47 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
     };
 
     fetchParticipants();
-  }, [task.id]);
+  }, [task.id, prefetchedParticipants]);
   
-  // Generate stars for cosmic illustration
+  // Generate static stars for cosmic illustration
   const renderStars = () => {
-    const stars = [];
-    for (let i = 0; i < 20; i++) {
-      const size = Math.random() * 3 + 1;
-      stars.push(
-        <View
-          key={i}
-          style={{
-            position: "absolute",
-            width: size,
-            height: size,
-            backgroundColor: "white",
-            borderRadius: size / 2,
-            top: Math.random() * 130,
-            left: Math.random() * CARD_WIDTH,
-          }}
-        />
-      );
-    }
-    return stars;
+    return STATIC_STARS.map((star, i) => (
+      <View
+        key={i}
+        style={{
+          position: "absolute",
+          width: star.size,
+          height: star.size,
+          backgroundColor: "white",
+          borderRadius: star.size / 2,
+          top: star.top,
+          left: star.left,
+        }}
+      />
+    ));
   };
 
-  // Generate trees for forest illustration
+  // Generate static trees for forest illustration
   const renderTrees = () => {
-    const trees = [];
-    for (let i = 0; i < 15; i++) {
-      const height = Math.random() * 20 + 15;
-      trees.push(
-        <View
-          key={i}
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: i * (CARD_WIDTH / 15) + Math.random() * 10,
-            width: 0,
-            height: 0,
-            borderLeftWidth: 8,
-            borderRightWidth: 8,
-            borderBottomWidth: height,
-            borderLeftColor: "transparent",
-            borderRightColor: "transparent",
-            borderBottomColor: "#4338ca",
-            opacity: 0.6,
-          }}
-        />
-      );
-    }
-    return trees;
+    return STATIC_TREES.map((tree, i) => (
+      <View
+        key={i}
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: tree.left,
+          width: 0,
+          height: 0,
+          borderLeftWidth: 8,
+          borderRightWidth: 8,
+          borderBottomWidth: tree.height,
+          borderLeftColor: "transparent",
+          borderRightColor: "transparent",
+          borderBottomColor: "#4338ca",
+          opacity: 0.6,
+        }}
+      />
+    ));
   };
 
   // Helper function to get initial for avatar
@@ -126,31 +138,29 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
       );
     }
 
-    if (participants.length === 0) {
+    // Only show collaborator avatar if there is a participant who is NOT the owner
+    const otherParticipants = participants.filter(p => p.user_id !== creator?.id);
+    if (otherParticipants.length === 0) {
+      // Only owner
       return (
         <View style={styles.avatarStack}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {getUserInitial(creator)}
-            </Text>
+            <Text style={styles.avatarText}>{getUserInitial(creator)}</Text>
           </View>
         </View>
       );
     }
-
-    // Show at most 2 avatars stacked
+    // Owner + first collaborator
     return (
       <View style={styles.avatarStack}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{getUserInitial(creator)}</Text>
         </View>
-        {participants.length > 0 && (
-          <View style={styles.greenAvatarStacked}>
-            <Text style={styles.greenAvatarText}>
-              {getParticipantInitial(participants[0])}
-            </Text>
-          </View>
-        )}
+        <View style={styles.greenAvatarStacked}>
+          <Text style={styles.greenAvatarText}>
+            {getParticipantInitial(otherParticipants[0])}
+          </Text>
+        </View>
       </View>
     );
   };
@@ -214,11 +224,11 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
         {/* Cosmic illustration */}
         <View style={styles.illustration}>
           {renderStars()}
-          {/* Some planet-like circles */}
+          {/* Static planet-like circles */}
           <View style={styles.planet1} />
           <View style={styles.planet2} />
           <View style={styles.planet3} />
-          {/* Some random scribbles to mimic the hand-drawn look */}
+          {/* Static scribbles to mimic the hand-drawn look */}
           <View style={styles.scribble1} />
           <View style={styles.scribble2} />
           <View style={styles.scribble3} />
@@ -227,7 +237,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
         {/* Forest illustration */}
         <View style={styles.forestIllustration}>
           {renderTrees()}
-          {/* Add some lines to mimic the text-like scribbles */}
+          {/* Static lines to mimic the text-like scribbles */}
           <View style={styles.textScribble1} />
           <View style={styles.textScribble2} />
           <View style={styles.textScribble3} />
@@ -266,7 +276,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, style }) => {
         <View style={{ height: 4 }} />
         <Text style={styles.updatedDetailsText}>
           {task.description ||
-            "Find hotels for 3 days in Jakarta and 5 days in Bali. Check out cheap ticket options to fly down"}
+            ""}
         </Text>
 
         {/* Collaborators section */}
@@ -552,4 +562,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TaskCard;
+// Use React.memo to prevent unnecessary re-renders
+export default memo(TaskCard);

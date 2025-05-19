@@ -5,10 +5,12 @@ import { useRouter, Redirect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { clearAllTasks } from '@/lib/powersync/taskService';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { usePowerSyncApp } from '@/lib/powersync/provider';
 
 export default function ResetScreen() {
   const router = useRouter();
   const { session, signOut } = useAuth();
+  const { resetPowerSync } = usePowerSyncApp();
   const [isClearing, setIsClearing] = useState(false);
 
   // Redirect to auth if not logged in
@@ -19,10 +21,22 @@ export default function ResetScreen() {
   const handleClearAllTasks = async () => {
     try {
       setIsClearing(true);
+      
+      // Step 1: Clear all tasks and delete database
       await clearAllTasks();
+      
+      // Step 2: Try to reset PowerSync connection
+      try {
+        console.log("🔄 Attempting to reset PowerSync connections...");
+        const resetSuccess = await resetPowerSync();
+        console.log(`PowerSync reset ${resetSuccess ? 'successful' : 'failed'}`);
+      } catch (error) {
+        console.error("Failed to reset PowerSync:", error);
+      }
+      
       Alert.alert(
-        'Success', 
-        'All tasks have been cleared from the database',
+        'Complete Reset Successful', 
+        'All tasks have been cleared from the database.\n\n⚠️ IMPORTANT: You MUST RESTART THE APP NOW to complete the reset process.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -37,12 +51,12 @@ export default function ResetScreen() {
   
   const confirmClearAllTasks = () => {
     Alert.alert(
-      'Clear All Tasks', 
-      'Are you sure you want to delete all tasks? This action cannot be undone.', 
+      'Complete Database Reset', 
+      'This will delete ALL tasks and completely reset the database. You must restart the app afterward.\n\nThis action cannot be undone.', 
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Clear All', 
+          text: 'Reset Everything', 
           style: 'destructive',
           onPress: handleClearAllTasks 
         }
@@ -62,7 +76,7 @@ export default function ResetScreen() {
           {'\n'}• Delete the database file to remove pending sync
           {'\n'}• Fix any sync constraint issues
           {'\n'}• Remove all related data from Supabase
-          {'\n\n'}You may need to restart the app after reset.
+          {'\n\n'}⚠️ You MUST RESTART the app after reset ⚠️
         </Text>
         
         <TouchableOpacity
