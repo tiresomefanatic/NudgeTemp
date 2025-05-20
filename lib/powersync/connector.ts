@@ -170,6 +170,21 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
                 record.is_postponed = record.is_postponed === true ? 1 : (record.is_postponed === false ? 0 : record.is_postponed);
               }
               
+              // For completed tasks, check if they already exist in Supabase with completed status
+              // This prevents repeated uploads of the same completed task
+              if (record.is_completed === 1) {
+                const { data: existingTask, error: checkError } = await supabase
+                  .from("tasks")
+                  .select("id, is_completed")
+                  .eq("id", op.id)
+                  .single();
+                  
+                if (!checkError && existingTask && existingTask.is_completed === 1) {
+                  console.log(`⏭️ Task ${op.id} already completed in Supabase - skipping upload`);
+                  continue; // Skip this operation and move to the next one
+                }
+              }
+              
               result = await supabase.from("tasks").upsert(record);
               if (result.error) {
                 console.error(
@@ -218,6 +233,21 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
               }
               if (record.is_postponed !== undefined) {
                 record.is_postponed = record.is_postponed === true ? 1 : (record.is_postponed === false ? 0 : record.is_postponed);
+              }
+              
+              // For completed tasks, check if they already exist in Supabase with completed status
+              // This prevents repeated uploads of the same completed task
+              if (record.is_completed === 1) {
+                const { data: existingTask, error: checkError } = await supabase
+                  .from("tasks")
+                  .select("id, is_completed")
+                  .eq("id", op.id)
+                  .single();
+                  
+                if (!checkError && existingTask && existingTask.is_completed === 1) {
+                  console.log(`⏭️ Task ${op.id} already completed in Supabase - skipping update`);
+                  continue; // Skip this operation and move to the next one
+                }
               }
               
               result = await supabase

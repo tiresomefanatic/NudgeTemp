@@ -26,18 +26,10 @@ export default function SocialAuthButtons({
     <View style={styles.container}>
       <View style={styles.dividerContainer}>
         <View style={styles.divider} />
-        <Text style={styles.dividerText}>or</Text>
         <View style={styles.divider} />
       </View>
 
-      <TouchableOpacity
-        style={[styles.socialButton, styles.googleButton]}
-        onPress={onGooglePress}
-        disabled={isLoading}
-      >
-        <AntDesign name="google" size={18} color="#EA4335" />
-        <Text style={styles.googleButtonText}>Continue with Google</Text>
-      </TouchableOpacity>
+
 
       {/* Apple Sign In is typically only shown on iOS devices */}
       {Platform.OS === "ios" && (

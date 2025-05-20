@@ -32,6 +32,7 @@ import {
   archiveTask,
   clearAllTasks,
   debugTaskParticipants,
+  fetchParticipantTasks,
 } from "@/lib/powersync/taskService";
 import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
 import { usePowerSyncApp } from "@/lib/powersync/provider";
@@ -58,6 +59,35 @@ export default function TasksScreen() {
   const [addTitle, setAddTitle] = useState("");
   const [addDetails, setAddDetails] = useState("");
   const [contributorIds, setContributorIds] = useState<number[]>([]);
+  
+  // Add an effect to trigger fetch of the latest task data when the screen is mounted
+  // This helps ensure all devices have the most current task statuses
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchLatestTaskData = async () => {
+      console.log("🔄 Fetching latest task data on screen mount");
+      try {
+        // Small delay to ensure UI is rendered and ready for updates
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        if (isMounted) {
+          // fetchParticipantTasks(false) forces a reload from Supabase including recent completions
+          await fetchParticipantTasks(false);
+          console.log("✅ Successfully refreshed tasks on screen mount");
+        }
+      } catch (error) {
+        console.error("Error refreshing tasks on screen mount:", error);
+      }
+    };
+    
+    fetchLatestTaskData();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -414,7 +444,7 @@ export default function TasksScreen() {
         </View>
       )}
 
-       {/* <View style={styles.footer}>
+        <View style={styles.footer}>
         <TouchableOpacity
           style={styles.resetButton}
           onPress={navigateToResetScreen}
@@ -422,7 +452,7 @@ export default function TasksScreen() {
           <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
           <Text style={styles.resetButtonText}>Reset Database</Text>
         </TouchableOpacity>
-      </View>  */}
+      </View>  
 
       {/* Add Task Button */}
       {!showAddCard && (

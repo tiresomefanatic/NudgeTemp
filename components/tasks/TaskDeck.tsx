@@ -29,8 +29,8 @@ import { useCurrentUser } from "@/lib/powersync/userService";
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.85;
 
-// Constants for swipe thresholds
-const SWIPE_THRESHOLD = width * 0.25;
+// Constants for swipe thresholds - reduced for easier detection
+const SWIPE_THRESHOLD = width * 0.2; // Reduced from 0.25 for easier right swipe detection
 const SWIPE_UP_THRESHOLD = height * 0.15; // Threshold for upward swipe (nudge)
 const SWIPE_DOWN_THRESHOLD = height * 0.15;
 const ROTATION_ANGLE = 8;
@@ -545,7 +545,7 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
     onStartShouldSetPanResponder: (evt, gestureState) => {
       // Don't capture gestures for very small movements (likely scrolling)
       // Also don't capture if we're already animating a swipe
-      return !isSwipeAnimating && (Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5);
+      return !isSwipeAnimating && (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3);
     },
     onMoveShouldSetPanResponder: (evt, gestureState) => {
       // Don't capture if we're already animating a swipe
@@ -652,7 +652,13 @@ const TaskDeck: React.FC<TaskDeckProps> = ({
         (onArchive && canArchiveTask(currentTask.id)) || 
         (loadingRoles && onArchive && currentTask.creatorId === currentUser?.id);
       
-      if (gesture.dx > SWIPE_THRESHOLD && canCompleteOptimistic) {
+      // Lower threshold for right swipe to make completion easier
+      // For right-swipe, we'll use a lower threshold as users report difficulty
+      const rightSwipeThreshold = SWIPE_THRESHOLD * 0.8; // 20% lower threshold for right swipes
+      
+      if (gesture.dx > rightSwipeThreshold && canCompleteOptimistic) {
+        // Log that we're triggering right swipe completion
+        console.log(`Task ${currentTask.id} being marked as completed via right swipe (dx: ${gesture.dx})`);
         // Swiped right - complete (only if user is allowed)
         completeSwipe('right', cardIndex, gesture);
       } else if (gesture.dx < -SWIPE_THRESHOLD) {
