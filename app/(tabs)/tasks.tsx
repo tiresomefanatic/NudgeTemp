@@ -174,12 +174,6 @@ export default function TasksScreen() {
     }
   };
 
-  // Navigate to reset screen
-  const navigateToResetScreen = () => {
-    Haptics.selectionAsync();
-    router.push("/reset");
-  };
-
   // Handle clearing all tasks from the database
   const handleClearAllTasks = async () => {
     try {
@@ -444,15 +438,7 @@ export default function TasksScreen() {
         </View>
       )}
 
-        <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.resetButton}
-          onPress={navigateToResetScreen}
-        >
-          <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
-          <Text style={styles.resetButtonText}>Reset Database</Text>
-        </TouchableOpacity>
-      </View>  
+
 
       {/* Add Task Button */}
       {!showAddCard && (
@@ -537,22 +523,6 @@ const styles = StyleSheet.create({
     display: 'flex',
     gap: 8,
     zIndex: 20,
-  },
-
-  resetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 77, 79, 0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginTop: 16,
-  },
-  resetButtonText: {
-    color: "#ff4d4f",
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: "500",
   },
   container: {
     flex: 1,

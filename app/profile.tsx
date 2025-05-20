@@ -10,10 +10,15 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
-
+import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 export default function ProfileScreen() {
   const goBack = () => {
     router.back();
+  };
+  const navigateToResetScreen = () => {
+    Haptics.selectionAsync();
+    router.push("/reset");
   };
 
   return (
@@ -40,6 +45,16 @@ export default function ProfileScreen() {
         <Text style={styles.profileText}>Profile Page</Text>
         <Text style={styles.descriptionText}>Your profile information will appear here.</Text>
       </View>
+      
+      <View>
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={navigateToResetScreen}
+        >
+          <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
+          <Text style={styles.resetButtonText}>Reset Database</Text>
+        </TouchableOpacity>
+      </View>  
     </SafeAreaView>
   );
 }
@@ -100,5 +115,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  resetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 77, 79, 0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginTop: 16,
+  },
+  resetButtonText: {
+    color: "#ff4d4f",
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: "500",
   },
 }); 
