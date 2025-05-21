@@ -29,8 +29,10 @@ import {
   completeTask,
   postponeTask,
   nudgeTask,
+  archiveTask,
   clearAllTasks,
   debugTaskParticipants,
+  fetchParticipantTasks,
 } from "@/lib/powersync/taskService";
 import { OfflineModeToggle } from "@/components/ui/OfflineModeToggle";
 import { usePowerSyncApp } from "@/lib/powersync/provider";
@@ -57,6 +59,35 @@ export default function TasksScreen() {
   const [addTitle, setAddTitle] = useState("");
   const [addDetails, setAddDetails] = useState("");
   const [contributorIds, setContributorIds] = useState<number[]>([]);
+  
+  // Add an effect to trigger fetch of the latest task data when the screen is mounted
+  // This helps ensure all devices have the most current task statuses
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchLatestTaskData = async () => {
+      console.log("🔄 Fetching latest task data on screen mount");
+      try {
+        // Small delay to ensure UI is rendered and ready for updates
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        if (isMounted) {
+          // fetchParticipantTasks(false) forces a reload from Supabase including recent completions
+          await fetchParticipantTasks(false);
+          console.log("✅ Successfully refreshed tasks on screen mount");
+        }
+      } catch (error) {
+        console.error("Error refreshing tasks on screen mount:", error);
+      }
+    };
+    
+    fetchLatestTaskData();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -121,11 +152,26 @@ export default function TasksScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // No Alert.alert dialog
   };
-
-  // Navigate to reset screen
-  const navigateToResetScreen = () => {
-    Haptics.selectionAsync();
-    router.push("/reset");
+  
+  const handleArchiveTask = async (task: Task) => {
+    try {
+      const success = await archiveTask(task.id);
+      
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        // Show alert that user is not allowed to archive this task
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert(
+          "Action Not Allowed",
+          "Only the task owner can archive a task.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      console.error("Error archiving task:", error);
+      Alert.alert("Error", "Failed to archive task");
+    }
   };
 
   // Handle clearing all tasks from the database
@@ -303,6 +349,7 @@ export default function TasksScreen() {
             onComplete={handleCompleteTask}
             onPostpone={handlePostponeTask}
             onNudge={handleNudgeTask}
+            onArchive={handleArchiveTask}
             onFinish={handleFinishAllTasks}
             addTaskCardProps={showAddCard ? {
               title: addTitle,
@@ -391,15 +438,7 @@ export default function TasksScreen() {
         </View>
       )}
 
-       {/* <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.resetButton}
-          onPress={navigateToResetScreen}
-        >
-          <Ionicons name="trash-outline" size={16} color="#ff4d4f" />
-          <Text style={styles.resetButtonText}>Reset Database</Text>
-        </TouchableOpacity>
-      </View>  */}
+
 
       {/* Add Task Button */}
       {!showAddCard && (
@@ -484,22 +523,6 @@ const styles = StyleSheet.create({
     display: 'flex',
     gap: 8,
     zIndex: 20,
-  },
-
-  resetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 77, 79, 0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginTop: 16,
-  },
-  resetButtonText: {
-    color: "#ff4d4f",
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: "500",
   },
   container: {
     flex: 1,

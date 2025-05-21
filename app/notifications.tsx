@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -16,6 +16,8 @@ import {
   Platform,
   KeyboardAvoidingView,
   Keyboard,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useNavigation } from "expo-router";
@@ -23,21 +25,13 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from "@/lib/auth/AuthContext";
 import { Redirect } from "expo-router";
+import { Notification, fetchNotifications, markNotificationAsRead, deleteNotification } from "@/lib/powersync/notificationService";
 
 const { width } = Dimensions.get("window");
 
 const SWIPE_THRESHOLD = width * 0.3;
 
-interface Notification {
-  id: string;
-  user: string;
-  action: string;
-  content: string;
-  time: string;
-  type: string;
-}
-
-// Mock data for notifications
+// Mock data for notifications - keeping this for reference but not using it
 const MOCK_NOTIFICATIONS: Notification[] = [
   {
     id: '1',
@@ -126,6 +120,8 @@ const NotificationCard = ({ notification, onDismiss, onDone, backgroundColor }: 
             useNativeDriver: true,
           })
         ]).start(() => {
+          // Mark as read and dismiss
+          markNotificationAsRead(notification.id);
           onDismiss(notification.id);
         });
       } else if (gestureState.dx > SWIPE_THRESHOLD) {
@@ -141,6 +137,8 @@ const NotificationCard = ({ notification, onDismiss, onDone, backgroundColor }: 
             useNativeDriver: true,
           })
         ]).start(() => {
+          // Mark as read and done
+          markNotificationAsRead(notification.id);
           onDone(notification.id);
         });
       } else {
@@ -173,7 +171,6 @@ const NotificationCard = ({ notification, onDismiss, onDone, backgroundColor }: 
           <Text>{notification.content}</Text>
         </Text>
         <View style={styles.notificationFooterOnlyTime}>
-          <Text style={styles.timeText}>{notification.time}</Text>
         </View>
       </View>
     </Animated.View>
@@ -189,11 +186,43 @@ export default function NotificationsScreen() {
     return <Redirect href="/(auth)" />;
   }
   
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
-  const [olderNotifications, setOlderNotifications] = useState<Notification[]>(MOCK_OLDER_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [olderNotifications, setOlderNotifications] = useState<Notification[]>([]);
   const [isDismissModalVisible, setIsDismissModalVisible] = useState(false);
   const [dismissReason, setDismissReason] = useState('');
   const [currentDismissId, setCurrentDismissId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Function to load notifications
+  const loadNotifications = useCallback(async () => {
+    try {
+      const { current, older } = await fetchNotifications();
+      setNotifications(current);
+      setOlderNotifications(older);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    }
+  }, []);
+  
+  // Initial load
+  useEffect(() => {
+    const initialLoad = async () => {
+      setIsLoading(true);
+      await loadNotifications();
+      setIsLoading(false);
+    };
+    
+    initialLoad();
+  }, [loadNotifications]);
+  
+  // Pull to refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadNotifications();
+    setRefreshing(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [loadNotifications]);
   
   const navigateBack = () => {
     Haptics.selectionAsync();
@@ -207,8 +236,9 @@ export default function NotificationsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
   
-  const confirmDismiss = () => {
+  const confirmDismiss = async () => {
     if (currentDismissId) {
+      // Update UI - notification is already marked as read when swiped
       setNotifications(notifications.filter(n => n.id !== currentDismissId));
       setOlderNotifications(olderNotifications.filter(n => n.id !== currentDismissId));
       setIsDismissModalVisible(false);
@@ -223,15 +253,21 @@ export default function NotificationsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
   
-  const handleDone = (id: string) => {
+  const handleDone = async (id: string) => {
+    // Update UI - notification is already marked as read when swiped
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setNotifications(notifications.filter(n => n.id !== id));
     setOlderNotifications(olderNotifications.filter(n => n.id !== id));
   };
   
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setNotifications([]);
+    
+    // Mark all older notifications as read
+    for (const notification of olderNotifications) {
+      await markNotificationAsRead(notification.id);
+    }
+    
     setOlderNotifications([]);
   };
 
@@ -316,64 +352,84 @@ export default function NotificationsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            colors={['#3800FF']} 
+            tintColor={'#3800FF'}
+          />
+        }
       >
-        {/* Current Notifications */}
-        <View style={styles.notificationsSection}>
-          {notifications.map(notification => (
-            <NotificationCard
-              key={notification.id}
-              notification={notification}
-              onDismiss={handleDismiss}
-              onDone={handleDone}
-            />
-          ))}
-        </View>
-        
-        {/* Older Notifications Section */}
-        {olderNotifications.length > 0 && (
-          <View style={styles.olderSection}>
-            <View style={styles.olderHeader}>
-              <Text style={styles.olderTitle}>OLDER</Text>
-              <TouchableOpacity onPress={handleClearAll}>
-                <Text style={styles.clearAllTextCustom}>Clear all</Text>
-              </TouchableOpacity>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3800FF" />
+          </View>
+        ) : (
+          <>
+            {/* Current Notifications */}
+            <View style={styles.notificationsSection}>
+              {notifications.length === 0 ? (
+                <Text style={styles.emptyText}>No new notifications</Text>
+              ) : (
+                notifications.map(notification => (
+                  <NotificationCard
+                    key={notification.id}
+                    notification={notification}
+                    onDismiss={handleDismiss}
+                    onDone={handleDone}
+                  />
+                ))
+              )}
             </View>
             
-            {/* Stacked older notifications */}
-            <View style={styles.stackedNotifications}>
-              {olderNotifications.map((notification, index) => {
-                if (index > 2) return null;
+            {/* Older Notifications Section */}
+            {olderNotifications.length > 0 && (
+              <View style={styles.olderSection}>
+                <View style={styles.olderHeader}>
+                  <Text style={styles.olderTitle}>OLDER</Text>
+                  <TouchableOpacity onPress={handleClearAll}>
+                    <Text style={styles.clearAllTextCustom}>Clear all</Text>
+                  </TouchableOpacity>
+                </View>
                 
-                const scale = Math.pow(0.95, index); 
-                const topOffset = index * 20; 
-                
-                return (
-                  <View
-                    key={notification.id}
-                    style={[
-                      styles.stackedCard,
-                      styles.stackedCardCustom,
-                      {
-                        zIndex: 3 - index,
-                        top: topOffset,
-                        transform: [{ scale }],
-                        left: 'auto',
-                        right: 'auto',
-                        alignSelf: 'center',
-                      }
-                    ]}
-                  >
-                    <NotificationCard
-                      notification={notification}
-                      onDismiss={handleDismiss}
-                      onDone={handleDone}
-                      backgroundColor="#E9EAEC"
-                    />
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+                {/* Stacked older notifications */}
+                <View style={styles.stackedNotifications}>
+                  {olderNotifications.map((notification, index) => {
+                    if (index > 2) return null;
+                    
+                    const scale = Math.pow(0.95, index); 
+                    const topOffset = index * 20; 
+                    
+                    return (
+                      <View
+                        key={notification.id}
+                        style={[
+                          styles.stackedCard,
+                          styles.stackedCardCustom,
+                          {
+                            zIndex: 3 - index,
+                            top: topOffset,
+                            transform: [{ scale }],
+                            left: 'auto',
+                            right: 'auto',
+                            alignSelf: 'center',
+                          }
+                        ]}
+                      >
+                        <NotificationCard
+                          notification={notification}
+                          onDismiss={handleDismiss}
+                          onDone={handleDone}
+                          backgroundColor="#E9EAEC"
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -610,5 +666,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 200,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#868B97',
+    fontFamily: 'Pally',
+    fontSize: 16,
+    fontWeight: '400',
+    padding: 20,
   },
 }); 
