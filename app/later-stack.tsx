@@ -34,6 +34,7 @@ export default function LaterStackScreen() {
   const { tasks: allTasks, loading } = useAllTasks();
   const [participantsMap, setParticipantsMap] = useState<Record<string, TaskParticipant[]>>({});
   const [loadingParticipants, setLoadingParticipants] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   
   // Redirect to auth if not logged in
   if (!session) {
@@ -59,6 +60,12 @@ export default function LaterStackScreen() {
     
     fetchParticipants();
   }, [allTasks]);
+  
+  useEffect(() => {
+    if (!loading && !loadingParticipants && !hasLoadedOnce) {
+      setHasLoadedOnce(true);
+    }
+  }, [loading, loadingParticipants, hasLoadedOnce]);
   
   // Function to navigate back to the tasks screen
   const navigateBack = () => {
@@ -171,7 +178,7 @@ export default function LaterStackScreen() {
 
       {/* Content container with task cards */}
       <View style={styles.contentContainer}>
-        {loading || loadingParticipants ? (
+        {!hasLoadedOnce ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0066ff" />
             <Text style={styles.loadingText}>Loading all tasks...</Text>
