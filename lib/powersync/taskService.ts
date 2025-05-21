@@ -1224,7 +1224,15 @@ export const useTasks = () => {
                 .filter(task => !task.completedAt);
                 
               console.log(`📊 Watch update - ${updatedTasks.length} tasks, filtered: ${filteredTasks.length}`);
-              setTasks(filteredTasks);
+              setTasks(prev => {
+                if (
+                  prev.length !== filteredTasks.length ||
+                  prev.some((task, i) => task.id !== filteredTasks[i].id || JSON.stringify(task) !== JSON.stringify(filteredTasks[i]))
+                ) {
+                  return filteredTasks;
+                }
+                return prev;
+              });
             }
             
             // Continue watching for changes
@@ -1643,7 +1651,15 @@ export const useAllTasks = () => {
                 tasksList.length,
                 "total tasks (reactive update)"
               );
-              setTasks(tasksList);
+              setTasks(prev => {
+                if (
+                  prev.length !== tasksList.length ||
+                  prev.some((task, i) => task.id !== tasksList[i].id || JSON.stringify(task) !== JSON.stringify(tasksList[i]))
+                ) {
+                  return tasksList;
+                }
+                return prev;
+              });
             }
 
             // Continue watching for next change

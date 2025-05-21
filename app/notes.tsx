@@ -32,48 +32,48 @@ interface ChatMessage {
 
 // Mock data for the chat
 const mockChatData: ChatMessage[] = [
-  {
-    id: '1',
-    sender: 'A',
-    message: 'Created this task & assigned it to you and Pete',
-    timestamp: 'Yesterday',
-    date: 'Yesterday',
-    isSelf: false
-  },
-  {
-    id: '2',
-    sender: 'A',
-    message: 'Sam, Pete, please take care of this. It is imp',
-    timestamp: 'Yesterday',
-    date: 'Yesterday',
-    isSelf: false
-  },
-  {
-    id: '3',
-    sender: 'P',
-    message: '',
-    timestamp: '00:42',
-    date: 'Yesterday',
-    isSelf: false,
-    isVoiceNote: true
-  },
-  {
-    id: '4',
-    sender: 'S',
-    message: 'Remind me on Wednesday to do this please :)',
-    timestamp: '3:58 PM',
-    date: 'Today',
-    isSelf: true
-  },
-  {
-    id: '5',
-    sender: 'S',
-    message: '',
-    timestamp: '00:42',
-    date: 'Today',
-    isSelf: true,
-    isVoiceNote: true
-  }
+  // {
+  //   id: '1',
+  //   sender: 'A',
+  //   message: 'Created this task & assigned it to you and Pete',
+  //   timestamp: 'Yesterday',
+  //   date: 'Yesterday',
+  //   isSelf: false
+  // },
+  // {
+  //   id: '2',
+  //   sender: 'A',
+  //   message: 'Sam, Pete, please take care of this. It is imp',
+  //   timestamp: 'Yesterday',
+  //   date: 'Yesterday',
+  //   isSelf: false
+  // },
+  // {
+  //   id: '3',
+  //   sender: 'P',
+  //   message: '',
+  //   timestamp: '00:42',
+  //   date: 'Yesterday',
+  //   isSelf: false,
+  //   isVoiceNote: true
+  // },
+  // {
+  //   id: '4',
+  //   sender: 'S',
+  //   message: 'Remind me on Wednesday to do this please :)',
+  //   timestamp: '3:58 PM',
+  //   date: 'Today',
+  //   isSelf: true
+  // },
+  // {
+  //   id: '5',
+  //   sender: 'S',
+  //   message: '',
+  //   timestamp: '00:42',
+  //   date: 'Today',
+  //   isSelf: true,
+  //   isVoiceNote: true
+  // }
 ];
 
 export default function NotesScreen() {
