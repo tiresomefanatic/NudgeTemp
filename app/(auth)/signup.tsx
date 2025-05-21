@@ -16,6 +16,7 @@ import { useAuth } from "../../lib/auth/AuthContext";
 import SocialAuthButtons from "../(auth)/SocialAuthButtons";
 
 export default function SignupScreen() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -23,7 +24,7 @@ export default function SignupScreen() {
   const { signUp, signInWithGoogle, signInWithApple } = useAuth();
 
   const handleSignUp = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert("Missing fields", "Please fill in all fields");
       return;
     }
@@ -43,7 +44,7 @@ export default function SignupScreen() {
 
     try {
       setIsLoading(true);
-      const { error } = await signUp(email, password);
+      const { error } = await signUp(email, password, name);
 
       if (error) {
         Alert.alert("Sign up failed", error.message);
@@ -104,6 +105,18 @@ export default function SignupScreen() {
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
+            <Text style={styles.label}>Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              autoComplete="name"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
@@ -162,7 +175,7 @@ export default function SignupScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
-          <Link href="login">
+          <Link href="/(auth)/login">
             <Text style={styles.signInLink}>Sign In</Text>
           </Link>
         </View>

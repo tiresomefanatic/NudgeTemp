@@ -18,7 +18,7 @@ export default function ConfirmEmailScreen() {
         </Text>
 
         <View style={styles.buttonContainer}>
-          <Link href="login" asChild>
+          <Link href="/(auth)/login" asChild>
             <TouchableOpacity style={styles.button}>
               <Text style={styles.buttonText}>Return to Login</Text>
             </TouchableOpacity>
@@ -27,7 +27,7 @@ export default function ConfirmEmailScreen() {
 
         <Text style={styles.helperText}>
           Didn't receive an email? Check your spam folder or{" "}
-          <Link href="signup">
+          <Link href="/(auth)/signup">
             <Text style={styles.linkText}>try signing up again</Text>
           </Link>
         </Text>

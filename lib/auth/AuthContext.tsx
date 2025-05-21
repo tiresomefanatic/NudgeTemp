@@ -24,7 +24,8 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (
     email: string,
-    password: string
+    password: string,
+    name: string
   ) => Promise<{ error: Error | null; data: { user: User | null } }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
@@ -151,19 +152,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   // Sign up with email and password
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, name: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: "nudge://confirm-email",
+          data: {
+            full_name: name,
+          },
         },
       });
 
       if (!error && data?.user) {
+        const nameParts = name.trim().split(' ');
+        const firstName = nameParts[0];
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+        
         // Create the user in our database
-        await createUserInDatabase(data.user);
+        await supabase.from('users').insert({
+          email: email,
+          first_name: firstName,
+          last_name: lastName,
+        });
         
         // Navigate to confirmation screen
         router.navigate("/(auth)/confirm-email");
