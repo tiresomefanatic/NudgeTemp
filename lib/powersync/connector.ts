@@ -170,22 +170,22 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
                 record.is_postponed = record.is_postponed === true ? 1 : (record.is_postponed === false ? 0 : record.is_postponed);
               }
               
-              // For completed tasks, check if they already exist in Supabase with completed status
-              // This prevents repeated uploads of the same completed task
-              if (record.is_completed === 1) {
-                const { data: existingTask, error: checkError } = await supabase
-                  .from("tasks")
-                  .select("id, is_completed")
-                  .eq("id", op.id)
-                  .single();
-                  
-                if (!checkError && existingTask && existingTask.is_completed === 1) {
-                  console.log(`⏭️ Task ${op.id} already completed in Supabase - skipping upload`);
-                  continue; // Skip this operation and move to the next one
-                }
+              // Check if task already exists in Supabase to prevent sync loops
+              // This is crucial for tasks created via direct Supabase insert + PowerSync local insert
+              const { data: existingTask, error: existsCheckError } = await supabase
+                .from("tasks")
+                .select("id, is_completed, created_at")
+                .eq("id", op.id)
+                .single();
+                
+              if (!existsCheckError && existingTask) {
+                console.log(`⏭️ Task ${op.id} already exists in Supabase - skipping upload to prevent sync loop`);
+                // Create a successful result to mark this operation as handled
+                result = { data: existingTask, error: null };
+              } else {
+                result = await supabase.from("tasks").upsert(record);
               }
               
-              result = await supabase.from("tasks").upsert(record);
               if (result.error) {
                 console.error(
                   `❌ Insert error: ${result.error.message}`,
@@ -235,25 +235,38 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
                 record.is_postponed = record.is_postponed === true ? 1 : (record.is_postponed === false ? 0 : record.is_postponed);
               }
               
-              // For completed tasks, check if they already exist in Supabase with completed status
-              // This prevents repeated uploads of the same completed task
-              if (record.is_completed === 1) {
-                const { data: existingTask, error: checkError } = await supabase
-                  .from("tasks")
-                  .select("id, is_completed")
-                  .eq("id", op.id)
-                  .single();
-                  
-                if (!checkError && existingTask && existingTask.is_completed === 1) {
-                  console.log(`⏭️ Task ${op.id} already completed in Supabase - skipping update`);
-                  continue; // Skip this operation and move to the next one
+              // Check if the task exists in Supabase and if the data is already consistent
+              // to prevent unnecessary updates that can cause sync loops
+              const { data: currentTask, error: updateCheckError } = await supabase
+                .from("tasks")
+                .select("*")
+                .eq("id", op.id)
+                .single();
+                
+              if (!updateCheckError && currentTask) {
+                // Compare key fields to see if update is actually needed
+                const needsUpdate = Object.keys(record).some(key => {
+                  if (key === 'id') return false; // Skip ID comparison
+                  return currentTask[key] !== record[key];
+                });
+                
+                if (!needsUpdate) {
+                  console.log(`⏭️ Task ${op.id} is already up to date in Supabase - skipping update to prevent sync loop`);
+                  // Create a successful result to mark this operation as handled
+                  result = { data: currentTask, error: null };
+                } else {
+                  result = await supabase
+                    .from("tasks")
+                    .update(record)
+                    .eq("id", op.id);
                 }
+              } else {
+                result = await supabase
+                  .from("tasks")
+                  .update(record)
+                  .eq("id", op.id);
               }
               
-              result = await supabase
-                .from("tasks")
-                .update(record)
-                .eq("id", op.id);
               if (result.error) {
                 console.error(
                   `❌ Update error: ${result.error.message}`,

@@ -18,11 +18,11 @@ import { router, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import LaterStackTaskCard from "@/components/tasks/LaterStackTaskCard";
-import { useAllTasks, unpostponeTask, batchGetTaskParticipants, getTaskParticipants } from "@/lib/powersync/taskService";
+import { useAllTasksForUser, unpostponeTask, batchGetTaskParticipants, getTaskParticipants } from "@/lib/powersync/taskService";
 import { Ionicons } from "@expo/vector-icons";
 import { Task, TaskParticipant } from "@/types/task";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { useUser, formatUserName, getUserInitial } from "@/lib/powersync/userService";
+import { useUser, formatUserName, getUserInitial, useAllUsers } from "@/lib/powersync/userService";
 
 const { width } = Dimensions.get("window");
 // Constants for swipe - commented out as per requirements
@@ -31,7 +31,8 @@ const { width } = Dimensions.get("window");
 
 export default function LaterStackScreen() {
   const { session } = useAuth();
-  const { tasks: allTasks, loading } = useAllTasks();
+  const { tasks: allTasks, loading } = useAllTasksForUser();
+  const { users: allUsers } = useAllUsers();
   const [participantsMap, setParticipantsMap] = useState<Record<string, TaskParticipant[]>>({});
   const [loadingParticipants, setLoadingParticipants] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -102,26 +103,39 @@ export default function LaterStackScreen() {
     if (loadingParticipants) return [];
     
     const participants = participantsMap[task.id] || [];
+    const initials: string[] = [];
     
-    // Extract the first letter from participant names
-    return participants.map(participant => {
-      if (participant.user?.first_name) {
-        return participant.user.first_name.charAt(0).toUpperCase();
+    // Add creator/owner initial if they have a creatorId
+    if (task.creatorId) {
+      const creatorInitial = getOwnerInitial(task);
+      if (creatorInitial !== "?") {
+        initials.push(creatorInitial);
       }
-      return participant.user?.email?.charAt(0).toUpperCase() || '?';
+    }
+    
+    // Add other participants (excluding the creator to avoid duplicates)
+    participants.forEach(participant => {
+      if (participant.user_id !== task.creatorId) {
+        if (participant.user?.first_name) {
+          initials.push(participant.user.first_name.charAt(0).toUpperCase());
+        } else if (participant.user?.email) {
+          initials.push(participant.user.email.charAt(0).toUpperCase());
+        }
+      }
     });
+    
+    return initials;
   };
   
   // Helper function to get creator's name
   const getCreatorName = (task: Task): string => {
     if (!task.creatorId) return "Unknown";
     
-    // Look for creator in participants
+    // First, look for creator in participants
     const participants = participantsMap[task.id] || [];
     const creatorParticipant = participants.find(p => p.user_id === task.creatorId);
     
     if (creatorParticipant?.user) {
-      // Format user name directly without using formatUserName to avoid type errors
       const user = creatorParticipant.user;
       if (user.first_name && user.last_name) {
         return `${user.first_name} ${user.last_name}`;
@@ -132,20 +146,45 @@ export default function LaterStackScreen() {
       }
     }
     
+    // If not found in participants, look in all users
+    const creatorUser = allUsers.find(user => user.id === task.creatorId);
+    if (creatorUser) {
+      if (creatorUser.first_name && creatorUser.last_name) {
+        return `${creatorUser.first_name} ${creatorUser.last_name}`;
+      } else if (creatorUser.first_name) {
+        return creatorUser.first_name;
+      } else if (creatorUser.email) {
+        return creatorUser.email.split('@')[0];
+      }
+    }
+    
     return "Owner";
   };
 
   // Helper function to get owner's initial
   const getOwnerInitial = (task: Task): string => {
     if (!task.creatorId) return "?";
+    
+    // First, look for creator in participants
     const participants = participantsMap[task.id] || [];
     const creatorParticipant = participants.find(p => p.user_id === task.creatorId);
+    
     if (creatorParticipant?.user?.first_name) {
       return creatorParticipant.user.first_name.charAt(0).toUpperCase();
     }
     if (creatorParticipant?.user?.email) {
       return creatorParticipant.user.email.charAt(0).toUpperCase();
     }
+    
+    // If not found in participants, look in all users
+    const creatorUser = allUsers.find(user => user.id === task.creatorId);
+    if (creatorUser?.first_name) {
+      return creatorUser.first_name.charAt(0).toUpperCase();
+    }
+    if (creatorUser?.email) {
+      return creatorUser.email.charAt(0).toUpperCase();
+    }
+    
     return "?";
   };
 
