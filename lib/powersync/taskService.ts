@@ -81,34 +81,8 @@ export const createTask = async (task: Omit<Task, "id">, contributorIds: number[
   };
 
   try {
-    // Use Supabase for the initial insert to make sure the task gets properly created in the database
-    const { error } = await supabase.from('tasks').insert([newTask]);
-    
-    if (error) {
-      throw new Error(`Failed to create task in Supabase: ${error.message}`);
-    }
-    
-    // Add the creator as a participant with role 'owner'
-    if (creatorId) {
-      await supabase.from('participants').insert({
-        task_id: taskId,
-        user_id: creatorId,
-        role: 'owner'
-      });
-    }
-    
-    // Add other participants as 'nudger'
-    for (const contributorId of contributorIds) {
-      if (contributorId !== creatorId) {
-        await supabase.from('participants').insert({
-          task_id: taskId,
-          user_id: contributorId,
-          role: 'nudger'
-        });
-      }
-    }
-
-    // Also insert into local PowerSync database for immediate UI update
+    // Insert into PowerSync only - let automatic sync handle Supabase
+    // This prevents the dual-insertion sync loop issue
     const sql = `INSERT INTO tasks (
       id, 
       title, 
@@ -136,6 +110,79 @@ export const createTask = async (task: Omit<Task, "id">, contributorIds: number[
     ];
     
     await powersync.execute(sql, params);
+    console.log("✅ Task created in PowerSync:", taskId);
+    
+    // Wait for the task to be synced to Supabase before creating participants
+    // This ensures the foreign key constraint is satisfied
+    const waitForTaskInSupabase = async (maxRetries = 10, delay = 500) => {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const { data: taskData, error } = await supabase
+            .from('tasks')
+            .select('id')
+            .eq('id', taskId)
+            .single();
+            
+          if (!error && taskData) {
+            console.log(`✅ Task ${taskId} confirmed in Supabase after ${i + 1} attempts`);
+            return true;
+          }
+        } catch (e) {
+          // Task not yet synced
+        }
+        
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+      
+      console.warn(`⚠️ Task ${taskId} not found in Supabase after ${maxRetries} attempts`);
+      return false;
+    };
+    
+    // Create participants after confirming task exists in Supabase
+    setTimeout(async () => {
+      try {
+        const taskExistsInSupabase = await waitForTaskInSupabase();
+        
+        if (!taskExistsInSupabase) {
+          console.error(`❌ Cannot create participants - task ${taskId} not found in Supabase`);
+          return;
+        }
+        
+        // Add the creator as a participant with role 'owner'
+        if (creatorId) {
+          await supabase.from('participants').insert({
+            task_id: taskId,
+            user_id: creatorId,
+            role: 'owner'
+          });
+          console.log("✅ Creator participant added for task:", taskId);
+        }
+        
+        // Add other participants as 'nudger'
+        for (const contributorId of contributorIds) {
+          if (contributorId !== creatorId) {
+            try {
+              await supabase.from('participants').insert({
+                task_id: taskId,
+                user_id: contributorId,
+                role: 'nudger'
+              });
+              console.log(`✅ Added nudger participant ${contributorId} for task:`, taskId);
+            } catch (participantError) {
+              console.error(`❌ Failed to add participant ${contributorId}:`, participantError);
+            }
+          }
+        }
+        
+        if (contributorIds.length > 0) {
+          console.log("✅ Additional participants added for task:", taskId);
+        }
+      } catch (participantError) {
+        console.warn("⚠️ Error adding participants for task:", taskId, participantError);
+      }
+    }, 100); // Start checking almost immediately
     
     // Trigger an update of participant tasks in the background
     setTimeout(() => {
@@ -147,7 +194,7 @@ export const createTask = async (task: Omit<Task, "id">, contributorIds: number[
       } catch (refreshError) {
         console.warn("Error initiating background refresh:", refreshError);
       }
-    }, 500);
+    }, 2000); // Wait 2 seconds to allow participants to be added
 
     console.log("✅ Task created successfully:", taskId);
     return taskId;
@@ -576,27 +623,61 @@ export const fetchParticipantTasks = async (background: boolean = false) => {
     
     for (const task of uniqueCompletedTasks) {
       try {
-        // Explicitly mark as completed 
-        await powersync.execute(`
-          INSERT OR REPLACE INTO tasks (
-            id, title, description, priority, created_at, completed_at, postponed_at, 
-            postponed_count, creator_id, category, is_completed, is_postponed, is_archived
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          task.id,
-          task.title,
-          task.description,
-          task.priority,
-          task.created_at,
-          task.completed_at,
-          task.postponed_at,
-          task.postponed_count || 0,
-          task.creator_id,
-          task.category,
-          1, // Explicitly set is_completed to 1
-          task.is_postponed ? 1 : 0,
-          task.is_archived ? 1 : 0
-        ]);
+        // Check if the task already exists in PowerSync with the same data
+        // to avoid unnecessary INSERT OR REPLACE operations that create sync transactions
+        const existingResult = await powersync.execute(`
+          SELECT * FROM tasks WHERE id = ?
+        `, [task.id]);
+        
+        let needsUpdate = true;
+        if (existingResult.rows && existingResult.rows.length > 0) {
+          const existingTask = existingResult.rows.item(0);
+          
+          // Compare key fields to see if update is actually needed
+          needsUpdate = (
+            existingTask.title !== task.title ||
+            existingTask.description !== task.description ||
+            existingTask.priority !== task.priority ||
+            existingTask.is_completed !== 1 ||
+            existingTask.is_postponed !== (task.is_postponed ? 1 : 0) ||
+            existingTask.is_archived !== (task.is_archived ? 1 : 0) ||
+            existingTask.creator_id !== task.creator_id ||
+            existingTask.completed_at !== task.completed_at
+          );
+        }
+        
+        // Only insert/update if data is actually different
+        if (needsUpdate) {
+          // Explicitly mark as completed 
+          await powersync.execute(`
+            INSERT OR REPLACE INTO tasks (
+              id, title, description, priority, created_at, completed_at, postponed_at, 
+              postponed_count, creator_id, category, is_completed, is_postponed, is_archived
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            task.id,
+            task.title,
+            task.description,
+            task.priority,
+            task.created_at,
+            task.completed_at,
+            task.postponed_at,
+            task.postponed_count || 0,
+            task.creator_id,
+            task.category,
+            1, // Explicitly set is_completed to 1
+            task.is_postponed ? 1 : 0,
+            task.is_archived ? 1 : 0
+          ]);
+          
+          if (!background) {
+            console.log(`✅ Updated completed task ${task.id} in PowerSync`);
+          }
+        } else {
+          if (!background) {
+            console.log(`⏭️ Completed task ${task.id} already up to date in PowerSync - skipping`);
+          }
+        }
         
         // For completed tasks, also clean up any pending operations to prevent sync loops
         try {
@@ -685,26 +766,59 @@ export const fetchParticipantTasks = async (background: boolean = false) => {
         const isPostponed = task.is_postponed ? 1 : 0;
         const isArchived = task.is_archived ? 1 : 0;
         
-        await powersync.execute(`
-          INSERT OR REPLACE INTO tasks (
-            id, title, description, priority, created_at, completed_at, postponed_at, 
-            postponed_count, creator_id, category, is_completed, is_postponed, is_archived
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          task.id,
-          task.title,
-          task.description,
-          task.priority,
-          task.created_at,
-          task.completed_at,
-          task.postponed_at,
-          task.postponed_count || 0,
-          task.creator_id,
-          task.category,
-          isCompleted,
-          isPostponed,
-          isArchived
-        ]);
+        // Check if the task already exists in PowerSync with the same data
+        // to avoid unnecessary INSERT OR REPLACE operations that create sync transactions
+        const existingResult = await powersync.execute(`
+          SELECT * FROM tasks WHERE id = ?
+        `, [task.id]);
+        
+        let needsUpdate = true;
+        if (existingResult.rows && existingResult.rows.length > 0) {
+          const existingTask = existingResult.rows.item(0);
+          
+          // Compare key fields to see if update is actually needed
+          needsUpdate = (
+            existingTask.title !== task.title ||
+            existingTask.description !== task.description ||
+            existingTask.priority !== task.priority ||
+            existingTask.is_completed !== isCompleted ||
+            existingTask.is_postponed !== isPostponed ||
+            existingTask.is_archived !== isArchived ||
+            existingTask.creator_id !== task.creator_id
+          );
+        }
+        
+        // Only insert/update if data is actually different
+        if (needsUpdate) {
+          await powersync.execute(`
+            INSERT OR REPLACE INTO tasks (
+              id, title, description, priority, created_at, completed_at, postponed_at, 
+              postponed_count, creator_id, category, is_completed, is_postponed, is_archived
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            task.id,
+            task.title,
+            task.description,
+            task.priority,
+            task.created_at,
+            task.completed_at,
+            task.postponed_at,
+            task.postponed_count || 0,
+            task.creator_id,
+            task.category,
+            isCompleted,
+            isPostponed,
+            isArchived
+          ]);
+          
+          if (!background) {
+            console.log(`✅ Updated task ${task.id} in PowerSync`);
+          }
+        } else {
+          if (!background) {
+            console.log(`⏭️ Task ${task.id} already up to date in PowerSync - skipping`);
+          }
+        }
       } catch (e) {
         console.error(`Error syncing active task ${task.id} to PowerSync:`, e);
       }
@@ -1604,6 +1718,87 @@ export const nudgeTask = async (id: string): Promise<boolean> => {
     );
     throw error;
   }
+};
+
+// Hook to get all tasks where the user is either owner or participant - for the All Tasks screen
+export const useAllTasksForUser = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    console.log("🔍 Setting up all user tasks watcher...");
+
+    let unsubscribe: () => void;
+    let isMounted = true;
+
+    const setupWatcher = async () => {
+      try {
+        // First fetch tasks including ones where the user is a participant from Supabase
+        await fetchParticipantTasks(false);
+        
+        // Query for all tasks in PowerSync (they should already be filtered by fetchParticipantTasks)
+        const sql = `SELECT * FROM tasks ORDER BY created_at DESC`;
+        
+        // Get initial data
+        const result = await powersync.execute(sql);
+        if (result.rows?._array && isMounted) {
+          const tasksList = result.rows._array.map(toAppTask);
+          console.log("📝 Found", tasksList.length, "user tasks for all tasks screen");
+          setTasks(tasksList);
+          setLoading(false);
+        }
+
+        // Set up watcher for changes
+        const watcher = powersync.watch(sql);
+        const iterator = watcher[Symbol.asyncIterator]();
+
+        const processNext = async () => {
+          try {
+            const { value: result, done } = await iterator.next();
+            if (done) return;
+
+            if (result.rows?._array && isMounted) {
+              const tasksList = result.rows._array.map(toAppTask);
+              console.log("📝 Found", tasksList.length, "user tasks (reactive update)");
+              setTasks(prev => {
+                if (
+                  prev.length !== tasksList.length ||
+                  prev.some((task, i) => task.id !== tasksList[i].id || JSON.stringify(task) !== JSON.stringify(tasksList[i]))
+                ) {
+                  return tasksList;
+                }
+                return prev;
+              });
+            }
+
+            processNext();
+          } catch (err) {
+            console.error("❌ Error in all user tasks watcher:", err);
+          }
+        };
+
+        processNext();
+
+        unsubscribe = () => {
+          console.log("🔒 Cleaning up all user tasks watcher");
+        };
+      } catch (error) {
+        console.error("❌ Error setting up all user tasks watcher:", error);
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    setupWatcher();
+
+    return () => {
+      isMounted = false;
+      unsubscribe?.();
+    };
+  }, []);
+
+  return { tasks, loading };
 };
 
 // Hook to get all tasks - using PowerSync's reactive approach
