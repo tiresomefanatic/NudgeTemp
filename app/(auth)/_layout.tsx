@@ -5,15 +5,18 @@ import { useEffect } from 'react';
 import { useAuth } from '../../lib/auth/AuthContext';
 
 export default function AuthLayout() {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const router = useRouter();
   
-  // If user is already authenticated, redirect to the tasks screen
+  // If user is already authenticated AND has a name, redirect to the tasks screen
   useEffect(() => {
-    if (session) {
+    if (session && user?.user_metadata?.full_name) {
       router.replace('/(tabs)/tasks');
-    }
-  }, [session, router]);
+    } 
+    // If there's a session but no full_name, and we are not already on enter-name, 
+    // it implies OTP was successful, so AuthContext should handle navigation to enter-name.
+    // If no session, user stays in the auth flow.
+  }, [session, user, router]);
 
   return (
     <>
@@ -28,7 +31,8 @@ export default function AuthLayout() {
         <Stack.Screen name="signup" />
         <Stack.Screen name="confirm-email" />
         <Stack.Screen name="reset-password" />
-        <Stack.Screen name="index" redirect={session ? true : false} />
+        <Stack.Screen name="enter-name" />
+        <Stack.Screen name="index" redirect={session && user?.user_metadata?.full_name ? true : false} />
       </Stack>
     </>
   );

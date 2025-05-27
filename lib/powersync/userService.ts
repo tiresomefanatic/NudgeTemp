@@ -20,7 +20,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('email', authUser.user.email)
+      .eq('phone', authUser.user.phone)
       .single();
     
     if (error) {

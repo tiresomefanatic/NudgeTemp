@@ -44,7 +44,10 @@ export default function LaterStackScreen() {
 
   // Load participants for all tasks
   useEffect(() => {
-    if (!allTasks.length) return;
+    if (!allTasks.length) {
+      setLoadingParticipants(false);
+      return;
+    }
     
     const fetchParticipants = async () => {
       try {

@@ -21,16 +21,14 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (
-    email: string,
-    password: string,
-    name: string
-  ) => Promise<{ error: Error | null; data: { user: User | null } }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
-  signInWithApple: () => Promise<{ error: Error | null }>;
+  signInWithPhone: (phone: string) => Promise<{ error: Error | null }>;
+  verifyOtp: (
+    phone: string,
+    token: string
+  ) => Promise<{ error: Error | null; data: { session: Session | null } }>;
+  updateUserPhone: (phone: string) => Promise<{ error: Error | null }>;
+  updateUserName: (name: string) => Promise<{ error: Error | null }>;
 };
 
 // Create the AuthContext
@@ -63,32 +61,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const createUserInDatabase = async (user: User) => {
     try {
       const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', user.email)
+        .from("users")
+        .select("id")
+        .eq("phone", user.phone) // Changed from email to phone
         .single();
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found"
-        console.error('Error checking if user exists:', checkError);
+      if (checkError && checkError.code !== "PGRST116") {
+        // PGRST116 is "not found"
+        console.error("Error checking if user exists:", checkError);
         return;
       }
 
       // If user doesn't exist, create them
       if (!existingUser) {
-        const { error } = await supabase.from('users').insert({
-          email: user.email,
-          first_name: user.user_metadata?.full_name ? user.user_metadata.full_name.split(' ')[0] : null,
-          last_name: user.user_metadata?.full_name ? user.user_metadata.full_name.split(' ').slice(1).join(' ') : null,
+        const { error } = await supabase.from("users").insert({
+          phone: user.phone, // Changed from email to phone
+          first_name: user.user_metadata?.full_name
+            ? user.user_metadata.full_name.split(" ")[0]
+            : null,
+          last_name: user.user_metadata?.full_name
+            ? user.user_metadata.full_name.split(" ").slice(1).join(" ")
+            : null,
         });
 
         if (error) {
-          console.error('Error creating user in database:', error);
+          console.error("Error creating user in database:", error);
         } else {
-          console.log('User created in database successfully');
+          console.log("User created in database successfully");
         }
       }
     } catch (error) {
-      console.error('Error in createUserInDatabase:', error);
+      console.error("Error in createUserInDatabase:", error);
     }
   };
 
@@ -131,63 +134,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  // Sign in with email and password
-  const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (!error) {
-        // Redirect to tasks tab on successful sign in
-        router.replace("/(tabs)/tasks");
-      }
-
-      return { error };
-    } catch (error) {
-      console.error("Sign in error:", error);
-      return { error: error as Error };
-    }
-  };
-
-  // Sign up with email and password
-  const signUp = async (email: string, password: string, name: string) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: "nudge://confirm-email",
-          data: {
-            full_name: name,
-          },
-        },
-      });
-
-      if (!error && data?.user) {
-        const nameParts = name.trim().split(' ');
-        const firstName = nameParts[0];
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-        
-        // Create the user in our database
-        await supabase.from('users').insert({
-          email: email,
-          first_name: firstName,
-          last_name: lastName,
-        });
-        
-        // Navigate to confirmation screen
-        router.navigate("/(auth)/confirm-email");
-      }
-
-      return { data, error: error as Error | null };
-    } catch (error) {
-      console.error("Sign up error:", error);
-      return { data: { user: null }, error: error as Error };
-    }
-  };
-
   // Sign out
   const signOut = async () => {
     try {
@@ -199,120 +145,125 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Reset password
-  const resetPassword = async (email: string) => {
+  // Sign in with phone
+  const signInWithPhone = async (phone: string) => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "nudge://reset-password",
+      const { error } = await supabase.auth.signInWithOtp({
+        phone,
       });
       return { error };
     } catch (error) {
-      console.error("Reset password error:", error);
+      console.error("Phone sign in error:", error);
       return { error: error as Error };
     }
   };
 
-  // Sign in with Google
-  const signInWithGoogle = async () => {
+  // Verify OTP
+  const verifyOtp = async (phone: string, token: string) => {
     try {
-      setLoading(true);
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
+      const {
+        data,
+        error,
+      } = await supabase.auth.verifyOtp({
+        phone,
+        token,
+        type: "sms",
       });
 
-      if (error) throw error;
-
-      // Open browser for authentication
-      if (data?.url) {
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          redirectTo
-        );
-
-        if (result.type === "success") {
-          // Parse URL and extract tokens
-          const { url } = result;
-          const parsedUrl = Linking.parse(url);
-
-          if (parsedUrl.queryParams) {
-            // If using v2 OAuth flow (with access_token and refresh_token in URL)
-            const { access_token, refresh_token } = parsedUrl.queryParams;
-            if (access_token && refresh_token) {
-              await supabase.auth.setSession({
-                access_token: access_token as string,
-                refresh_token: refresh_token as string,
-              });
-              
-              // Redirect to the tasks screen after successful OAuth login
-              router.replace("/(tabs)/tasks");
-            }
-          }
+      if (!error && data.session) {
+         if (data.user) {
+          await createUserInDatabase(data.user); // Create user if not exists
         }
+        router.replace("/(auth)/enter-name"); // Navigate to enter name screen
       }
-
-      return { error: null };
+      return { data: { session: data.session }, error };
     } catch (error) {
-      console.error("Error signing in with Google:", error);
-      return { error: error as Error };
-    } finally {
-      setLoading(false);
+      console.error("Verify OTP error:", error);
+      return { data: { session: null }, error: error as Error };
     }
   };
 
-  // Sign in with Apple
-  const signInWithApple = async () => {
+  // Update user phone
+  const updateUserPhone = async (phone: string) => {
     try {
-      setLoading(true);
+      const { error } = await supabase.auth.updateUser({ phone });
+      return { error };
+    } catch (error) {
+      console.error("Update phone error:", error);
+      return { error: error as Error };
+    }
+  };
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "apple",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      });
+  // Update user name
+  const updateUserName = async (name: string) => {
+    try {
+      const nameParts = name.trim().split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
-      if (error) throw error;
+      // Get current user via session, then user object from session
+      const sessionResult = await supabase.auth.getSession();
+      const currentAuthUser = sessionResult?.data?.session?.user;
 
-      // Open browser for authentication
-      if (data?.url) {
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          redirectTo
-        );
-
-        if (result.type === "success") {
-          // Parse URL and extract tokens
-          const { url } = result;
-          const parsedUrl = Linking.parse(url);
-
-          if (parsedUrl.queryParams) {
-            // If using v2 OAuth flow (with access_token and refresh_token in URL)
-            const { access_token, refresh_token } = parsedUrl.queryParams;
-            if (access_token && refresh_token) {
-              await supabase.auth.setSession({
-                access_token: access_token as string,
-                refresh_token: refresh_token as string,
-              });
-              
-              // Redirect to the tasks screen after successful OAuth login
-              router.replace("/(tabs)/tasks");
-            }
-          }
-        }
+      if (!currentAuthUser || !currentAuthUser.phone) {
+        console.error("Error: Current auth user or phone number is not available for updating name.");
+        return { error: new Error("User phone number not found for updating name.") };
       }
 
+      // Update in auth.users table (user_metadata.full_name)
+      const { data: updatedAuthData, error: authError } = await supabase.auth.updateUser({
+        data: { full_name: name },
+      });
+
+      if (authError) {
+        console.error("Error updating user name in auth:", authError);
+        return { error: authError };
+      }
+
+      // Update in public.users table
+      const { error: dbError } = await supabase
+        .from('users')
+        .update({ first_name: firstName, last_name: lastName, updated_at: new Date().toISOString() })
+        .eq('phone', currentAuthUser.phone); 
+
+      if (dbError) {
+        console.error("Error updating user name in public.users table:", dbError);
+        return { error: dbError }; 
+      }
+      
+      const newAuthenticatedUser = updatedAuthData?.user; 
+
+      if (newAuthenticatedUser) {
+        setUser({
+            ...newAuthenticatedUser, 
+            user_metadata: {
+                ...(newAuthenticatedUser.user_metadata || {}),
+                full_name: name, 
+            }
+        });
+      } else if (user) {
+        setUser({
+          ...user,
+          user_metadata: {
+            ...(user.user_metadata || {}),
+            full_name: name,
+          },
+        });
+      } else {
+         setUser({
+            ...currentAuthUser, 
+            user_metadata: {
+                ...(currentAuthUser.user_metadata || {}),
+                full_name: name,
+            }
+        });
+      }
+      
+      router.replace("/(tabs)/tasks");
       return { error: null };
     } catch (error) {
-      console.error("Error signing in with Apple:", error);
+      console.error("General error in updateUserName:", error);
       return { error: error as Error };
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -320,12 +271,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     session,
     user,
     loading,
-    signIn,
-    signUp,
     signOut,
-    resetPassword,
-    signInWithGoogle,
-    signInWithApple,
+    signInWithPhone,
+    verifyOtp,
+    updateUserPhone,
+    updateUserName,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

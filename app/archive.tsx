@@ -24,7 +24,10 @@ export default function ArchiveScreen() {
 
   // Load participants for all tasks
   useEffect(() => {
-    if (!archivedTasks.length) return;
+    if (!archivedTasks.length) {
+      setLoadingParticipants(false);
+      return;
+    }
     
     const fetchParticipants = async () => {
       try {
