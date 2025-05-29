@@ -65,7 +65,8 @@ export default function RootLayout() {
     Kalam: require("../assets/fonts/Kalam-Variable.ttf"),
     Kihim: require("../assets/fonts/Kihim-Regular.otf"),
     Pally: require("../assets/fonts/Pally-Variable.ttf"),
-    
+    BeVietnamPro: require("../assets/fonts/BeVietnamPro-Variable.ttf"),
+    SpaceGrotesk: require("../assets/fonts/SpaceGrotesk-Variable.ttf"),
   });
 
   useEffect(() => {

@@ -43,7 +43,9 @@
             "./assets/fonts/SpaceMono-Regular.ttf",
             "./assets/fonts/Kalam-Variable.ttf",
             "./assets/fonts/Kihim-Regular.otf",
-            "./assets/fonts/Pally-Variable.ttf"
+            "./assets/fonts/Pally-Variable.ttf",
+            "./assets/fonts/BeVietnamPro-Variable.ttf",
+            "./assets/fonts/SpaceGrotesk-Variable.ttf"
           ]
         }
       ]
