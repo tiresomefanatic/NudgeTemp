@@ -2008,6 +2008,8 @@ export const useArchivedTasks = () => {
   useEffect(() => {
     console.log("🔍 Setting up archived tasks watcher...");
     let isMounted = true;
+    let participantTaskIds: string[] = []; 
+    let userId: number | null = null; 
     
     // Function to set up watchers for archived tasks
     const setupWatcher = async () => {
@@ -2030,19 +2032,72 @@ export const useArchivedTasks = () => {
         }
         
         // Also try to fetch tasks from Supabase to ensure all archived tasks are retrieved
-        const { data: supabaseArchivedTasks, error } = await supabase
+        const currentUser = await getCurrentUser();
+        if (!currentUser) {
+          if (isMounted) setLoading(false);
+          return;
+        }
+        userId = Number(currentUser.id);
+
+        // Fetch archived tasks created by this user
+        const { data: creatorArchivedTasks, error: creatorError } = await supabase
           .from('tasks')
           .select('*')
           .eq('is_archived', 1)
-          .order('archived_at', { ascending: false });
-          
-        if (error) {
-          console.error("Error fetching archived tasks from Supabase", error);
-        } else if (supabaseArchivedTasks?.length && isMounted) {
-          console.log("📁 Found", supabaseArchivedTasks.length, "archived tasks in Supabase");
+          .eq('creator_id', userId);
+        
+        if (creatorError) {
+          console.error("Error fetching creator archived tasks from Supabase", creatorError);
+          // Potentially set error state here if critical
+        }
+
+        // Get all task IDs where user is a participant
+        const { data: participantData, error: participantDataError } = await supabase
+          .from('participants')
+          .select('task_id')
+          .eq('user_id', userId);
+
+        if (participantDataError) {
+          console.error("Error fetching participant data for archived tasks", participantDataError);
+          // Potentially set error state here
+        }
+
+        // participantTaskIds declared in useEffect scope
+        if (participantData && participantData.length > 0) {
+          participantTaskIds = participantData.map(p => p.task_id).filter(Boolean);
+        }
+
+        let participantArchivedTasks: any[] = [];
+        if (participantTaskIds.length > 0) {
+          const { data: tasksData, error: participantTasksError } = await supabase
+            .from('tasks')
+            .select('*')
+            .in('id', participantTaskIds)
+            .eq('is_archived', 1);
+            
+          if (participantTasksError) {
+            console.error("Error fetching participant archived tasks from Supabase", participantTasksError);
+            // Potentially set error state here
+          } else {
+            participantArchivedTasks = tasksData || [];
+          }
+        }
+        
+        const supabaseArchivedTasksRaw = [
+          ...(creatorArchivedTasks || []),
+          ...participantArchivedTasks
+        ];
+        
+        // Deduplicate based on task ID
+        const uniqueSupabaseArchivedTasks = supabaseArchivedTasksRaw.filter((task, index, self) =>
+          index === self.findIndex((t) => t.id === task.id)
+        );
+
+        if (uniqueSupabaseArchivedTasks?.length && isMounted) {
+          console.log("📁 Found", uniqueSupabaseArchivedTasks.length, "user-specific archived tasks in Supabase");
           
           // Convert to app task format
-          const convertedTasks = supabaseArchivedTasks.map(task => ({
+          const convertedTasks = uniqueSupabaseArchivedTasks.map(task => ({
             id: task.id,
             title: task.title || "",
             description: task.description || "",
@@ -2112,33 +2167,60 @@ export const useArchivedTasks = () => {
         // Create async iterator
         const iterator = watcher[Symbol.asyncIterator]();
         
-        // Poll for changes
-        const poll = async () => {
+        // Store the iterator cleanup function.
+        // The original version had a simple setTimeout poll,
+        // which is not ideal for reactive updates from PowerSync.
+        // Using the async iterator pattern is better.
+        const processNext = async () => {
           try {
-            const { value } = await iterator.next();
+            // Check if still mounted before processing next
+            if (!isMounted) return;
+
+            const { value, done } = await iterator.next();
             
-            if (value && isMounted) {
-              const watchedTasks = value.rows._array.map(toAppTask);
-              setTasks(watchedTasks);
-              console.log("📊 Updated archived tasks list:", watchedTasks.length, "tasks");
+            if (done) {
+              console.log("Archived tasks watcher iterator finished.");
+              return;
             }
             
-            if (isMounted) {
-              setTimeout(poll, POLL_INTERVAL_MS);
+            if (value && value.rows && isMounted) { // Added check for value.rows
+              const watchedTasks = value.rows._array.map(toAppTask);
+              // Filter again to be absolutely sure, though ideally data in PowerSync is already correct
+              const userRelevantArchivedTasks = watchedTasks.filter(task => {
+                const isCreator = userId ? task.creatorId === userId : false;
+                const isParticipant = participantTaskIds.includes(task.id);
+                return task.isArchived && (isCreator || isParticipant);
+              });
+
+              setTasks(userRelevantArchivedTasks);
+              console.log("📊 Updated archived tasks list:", userRelevantArchivedTasks.length, "tasks");
+            }
+            
+            // Continue watching for changes
+            if(isMounted) {
+               processNext();
             }
           } catch (err: any) {
             if (isMounted) {
-              console.error("Error in archived tasks watcher:", err);
+              console.error("Error in archived tasks watcher (processNext):", err);
               setError(err);
-              // Try to restart polling after a delay
-              setTimeout(poll, POLL_INTERVAL_MS * 5);
+              // Optionally, attempt to restart the watcher or implement a backoff strategy
+              if (isMounted) {
+                setTimeout(processNext, POLL_INTERVAL_MS * 5); // Retry after a longer delay
+              }
             }
           }
         };
         
-        // Start polling
-        poll();
-        
+        // Start processing
+        processNext();
+
+        // Cleanup for the watcher's async iterator
+        // This will be called when the component unmounts
+        // (powersync.watch iterators might need explicit closing if a .return() method is available)
+        // For now, isMounted check should prevent updates.
+        // Consider if watcher itself needs explicit cleanup if iterator.return() is a thing for this PowerSync SDK version
+      
       } catch (err: any) {
         console.error("Failed to set up archived tasks watcher:", err);
         if (isMounted) {

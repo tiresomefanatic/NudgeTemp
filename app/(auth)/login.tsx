@@ -31,6 +31,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [otpError, setOtpError] = useState(false);
+  const [focusedOtpIndex, setFocusedOtpIndex] = useState(-1);
 
   const { signInWithPhone, verifyOtp } = useAuth();
   const otpInputRefs = useRef<Array<TextInput | null>>([]);
@@ -63,16 +64,16 @@ export default function LoginScreen() {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    const otpCode = otp.join("");
-    if (otpCode.length !== 6) {
+  const handleVerifyOtp = async (otpCode?: string) => {
+    const codeToVerify = otpCode || otp.join("");
+    if (codeToVerify.length !== 6) {
       Alert.alert("Invalid OTP", "Please enter the 6-digit OTP.");
       setOtpError(true);
       return;
     }
     const fullPhoneNumber = `${countryCode}${phoneNumber}`;
     setIsLoading(true);
-    const { error, data } = await verifyOtp(fullPhoneNumber, otpCode);
+    const { error, data } = await verifyOtp(fullPhoneNumber, codeToVerify);
     setIsLoading(false);
     if (error || !data?.session) {
       Alert.alert("OTP Verification Failed", error?.message || "Invalid OTP. Please try again.");
@@ -101,10 +102,10 @@ export default function LoginScreen() {
     if (text && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     } 
-    // If all fields are filled, attempt to verify
+    // If all fields are filled, attempt to verify automatically
     if (newOtp.every(val => val !== '') && newOtp.length === 6) {
-        // Automatically trigger verify if all filled - User might not want this immediately
-        // handleVerifyOtp(); // Consider if this is good UX
+        const completeOtp = newOtp.join("");
+        handleVerifyOtp(completeOtp);
     }
   };
 
@@ -119,11 +120,18 @@ export default function LoginScreen() {
       <TextInput
         key={index}
         ref={(ref) => (otpInputRefs.current[index] = ref)}
-        style={[styles.otpInput, otpError ? styles.otpInputError : (otp.join('').length === 6 && !otpError ? styles.otpInputSuccess: {})]}
+        style={[
+          styles.otpInput, 
+          focusedOtpIndex === index ? styles.otpInputFocused : {},
+          otpError ? styles.otpInputError : {},
+          (otp.join('').length === 6 && !otpError ? styles.otpInputSuccess : {})
+        ]}
         keyboardType="number-pad"
         maxLength={1}
         onChangeText={(text) => handleOtpChange(text, index)}
         onKeyPress={(e) => handleOtpKeyPress(e, index)}
+        onFocus={() => setFocusedOtpIndex(index)}
+        onBlur={() => setFocusedOtpIndex(-1)}
         value={digit}
       />
     ));
@@ -145,14 +153,15 @@ export default function LoginScreen() {
             </View>
             <View style={styles.formContainer}>
               <Text style={styles.loginTitle}>Log in or Sign Up</Text>
-              <View style={styles.phoneInputContainer}>
-                <TouchableOpacity style={styles.countryCodeContainer}>
+              <View style={styles.phoneInputRow}>
+                <TouchableOpacity style={styles.countryCodeBlock}>
                   <Text style={styles.countryCodeText}>{countryCode}</Text>
-                  <Ionicons name="caret-down" size={16} color={Colors.light.text} />
+                  <Ionicons name="caret-down" size={16} color="#5E626E" />
                 </TouchableOpacity>
                 <TextInput
-                  style={styles.phoneInput}
+                  style={styles.mobileInputBlock}
                   placeholder="Enter mobile number"
+                  placeholderTextColor="#5E626E"
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
                   keyboardType="phone-pad"
@@ -160,60 +169,59 @@ export default function LoginScreen() {
                 />
               </View>
               <TouchableOpacity
-                style={[styles.button, isLoading && styles.buttonDisabled]}
+                style={[styles.loginButton, isLoading && styles.buttonDisabled]}
                 onPress={handleSendOtp}
                 disabled={isLoading}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.buttonText}>Log In</Text>
+                  <Text style={styles.loginButtonText}>Log in</Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
         ) : (
-          // This will be replaced by a proper bottom sheet/modal
           <View style={styles.otpScreenContainer}> 
             <View style={styles.headerContainerOtp}>
                 <Text style={styles.logo}>nudge</Text>
             </View>
             <View style={styles.otpFormContainer}>
-                <Text style={styles.otpTitle}>Enter verification code</Text>
-                <View style={styles.sentToContainer}>
-                    <Text style={styles.otpSubtitle}>Sent to {`${countryCode} ${phoneNumber}`}</Text>
-                    <TouchableOpacity onPress={() => setIsOtpSent(false)}>
-                        <Ionicons name="pencil" size={18} color={Colors.light.primary} />
-                    </TouchableOpacity>
+                <View style={styles.otpTopContent}>
+                  <Text style={styles.otpTitle}>Enter verification code</Text>
+                  <View style={styles.sentToContainer}>
+                      <Text style={styles.sentToText}>Sent to </Text><Text style={styles.phoneNumberText}>{`${countryCode} ${phoneNumber}`}</Text>
+                      <TouchableOpacity onPress={() => setIsOtpSent(false)}>
+                          <Ionicons name="pencil" size={18} color={Colors.light.primary} />
+                      </TouchableOpacity>
+                  </View>
+                  <View style={styles.otpInputRow}>{renderOtpInputs()}</View>
+                  {otpError && (
+                    <Text style={styles.otpErrorText}>
+                      Uh Oh! The OTP you entered is invalid.
+                    </Text>
+                  )}
                 </View>
-                <View style={styles.otpInputRow}>{renderOtpInputs()}</View>
-                {otp.join('').length === 6 && !isLoading && (
-                     <TouchableOpacity
-                        style={[styles.button, styles.verifyButton, isLoading && styles.buttonDisabled]} // Added verifyButton style
-                        onPress={handleVerifyOtp}
-                        disabled={isLoading}
-                    >
-                        {isLoading ? (
-                        <ActivityIndicator color="#fff" />
-                        ) : (
-                        <Text style={styles.buttonText}>Verify OTP</Text>
-                        )}
+                
+                <View style={styles.bottomContainer}>
+                  {resendTimer > 0 ? (
+                    <Text style={styles.resendText}>
+                      Get verification code again in{" "}
+                      <Text style={styles.timerText}>{`00:${resendTimer < 10 ? "0" : ""}${resendTimer}`}</Text>
+                    </Text>
+                  ) : null}
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.resendButton, 
+                      resendTimer > 0 ? styles.resendButtonDisabled : styles.resendButtonEnabled
+                    ]}
+                    onPress={handleResendOtp}
+                    disabled={resendTimer > 0}
+                  >
+                    <Text style={styles.resendButtonText}>Resend Code</Text>
                   </TouchableOpacity>
-                )}
-                <Text style={styles.resendText}>
-                Get verification code again in{" "}
-                {resendTimer > 0 ? (
-                    <Text style={styles.timerText}>{`00:${resendTimer < 10 ? "0" : ""}${resendTimer}`}</Text>
-                ) : (
-                    <TouchableOpacity onPress={handleResendOtp} disabled={resendTimer > 0}>
-                    <Text style={[styles.resendLink, resendTimer > 0 && styles.disabledLink]}>Resend Code</Text>
-                    </TouchableOpacity>
-                )}
-                </Text>
-                {/* Numeric Keypad - Placeholder, typically handled by keyboardType="number-pad" for OTP or custom component for exact Figma style */}
-                 {/* <View style={styles.keypadContainer}> 
-                     <Text>Numeric Keypad would be here if not using system default</Text>
-                 </View> */}
+                </View>
             </View>
           </View>
         )}
@@ -243,72 +251,94 @@ const styles = StyleSheet.create({
     paddingTop: 60, 
   },
   logo: {
-    fontSize: 60, 
-    fontWeight: "bold",
-    color: "#fff",
-    fontFamily: "System", 
+    color: "#FFF",
+    fontFamily: "Sharpie",
+    fontSize: 72,
+    fontStyle: "normal",
+    fontWeight: 500,
+    lineHeight: 72, 
+    letterSpacing: 0.338,
   },
   formContainer: {
     backgroundColor: "#fff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 30,
-    paddingVertical: 40, 
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     alignItems: "center",
   },
   loginTitle: {
-    fontSize: 20, 
-    fontWeight: "bold",
-    color: Colors.light.text,
+    color: "#5a52ff", 
+    fontFamily: "Be Vietnam",
+    fontSize: 24,
+    fontStyle: "normal",
+    fontWeight: 700,
+    lineHeight: 32, 
+    letterSpacing: -0.25,
+    textAlign: "center",
     marginBottom: 20,
   },
-  phoneInputContainer: {
+  phoneInputRow: {
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    width: "100%",
-    height: 50,
-    borderColor: Colors.light.border,
-    borderWidth: 1,
-    borderRadius: 10,
-    marginBottom: 20,
-    paddingHorizontal: 5, 
+    marginBottom: 8,
+    gap: 8, 
   },
-  countryCodeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    borderRightWidth: 1,
-    borderRightColor: Colors.light.border,
-    height: '70%',
+  countryCodeBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#B2B5BD",
+    backgroundColor: "#FFF",
+    height: 48,
+    width: 86,
   },
   countryCodeText: {
+    color: "#5E626E",
+    fontFamily: "Urbanist",
     fontSize: 16,
-    marginRight: 5,
-    color: Colors.light.text,
+    fontStyle: "normal",
+    fontWeight: "400",
+    lineHeight: 22,
+    marginRight: 8,
   },
-  phoneInput: {
+  mobileInputBlock: {
     flex: 1,
-    height: "100%",
-    paddingHorizontal: 15,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#B2B5BD",
+    backgroundColor: "#FFF",
+    paddingHorizontal: 16,
+    height: 48,
+    color: "#5E626E",
+    fontFamily: "Urbanist",
     fontSize: 16,
-    color: Colors.light.text,
+    fontStyle: "normal",
+    fontWeight: "400",
+    lineHeight: 22,
   },
-  button: {
+  loginButton: {
     width: "100%",
-    height: 50,
-    backgroundColor: Colors.light.primary, 
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#3800FF",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 10,
-    marginTop: 10,
   },
   buttonDisabled: {
     backgroundColor: Colors.light.lightGray, 
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+  loginButtonText: {
+    color: "#FFF",
+    fontFamily: "Be Vietnam",
+    fontSize: 16,
+    fontStyle: "normal",
+    fontWeight: "300",
+    lineHeight: 20,
+    letterSpacing: 0,
   },
 
   // OTP Screen Styles 
@@ -326,27 +356,46 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 30,
-    paddingTop: 30, 
+    paddingHorizontal: 16,
+    paddingTop: 16, 
     alignItems: "center",
+    justifyContent: "space-between",
+  },
+  otpTopContent: {
+    width: '100%',
   },
   otpTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: Colors.light.primary, 
-    marginBottom: 10,
+    fontSize: 24,
+    fontWeight: "700",
+    color: Colors.light.primary,
+    fontFamily: "Be Vietnam",
+    lineHeight: 32,
+    letterSpacing: -0.25,
+    marginBottom: 6,
   },
    sentToContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     width: '100%',
-    marginBottom: 25,
+    marginBottom: 24,
+    gap: 8,
   },
-  otpSubtitle: {
-    fontSize: 15,
-    color: Colors.light.textSecondary,
-    textAlign: 'left',
+  sentToText: {
+    fontSize: 14,
+    color: '#5E626E',
+    fontFamily: 'Be Vietnam',
+    fontWeight: '300',
+    lineHeight: 20,
+    letterSpacing: 0,
+  },
+  phoneNumberText: {
+    fontSize: 14,
+    color: '#5E626E',
+    fontFamily: 'Be Vietnam',
+    fontWeight: '700',
+    lineHeight: 16,
+    letterSpacing: 0,
   },
   otpInputRow: {
     flexDirection: "row",
@@ -357,13 +406,15 @@ const styles = StyleSheet.create({
   otpInput: {
     width: 45,
     height: 55,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#DEDFE3',
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     textAlign: "center",
     fontSize: 20,
     color: Colors.light.text,
-    backgroundColor: '#F7F7F7' 
   },
   otpInputError: {
     borderColor: Colors.light.danger, 
@@ -373,32 +424,51 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.success, 
     color: Colors.light.success,
   },
-  verifyButton: {
-      backgroundColor: Colors.light.primary, 
+  otpInputFocused: {
+    borderColor: Colors.light.otpFocus,
+  },
+  otpErrorText: {
+    color: Colors.light.danger,
+    fontFamily: "Inter",
+    fontSize: 12,
+    fontWeight: "400",
+    lineHeight: 12,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  bottomContainer: {
+    width: "100%",
+    alignItems: "flex-start",
   },
   resendText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    marginTop: 20,
-    textAlign: "center",
+    marginBottom: 8,
   },
   timerText: {
     color: Colors.light.primary, 
     fontWeight: "bold",
   },
-  resendLink: {
-    color: Colors.light.primary, 
-    fontWeight: "bold",
-    textDecorationLine: "underline",
+  resendButton: {
+    width: "100%",
+    height: 48,
+    backgroundColor: "#B2B5BD",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  disabledLink: {
-    color: Colors.light.textPlaceholder, 
-    textDecorationLine: "none",
+  resendButtonText: {
+    color: "#FFF",
+    fontFamily: "Be Vietnam",
+    fontSize: 16,
+    fontWeight: "300",
+    lineHeight: 20,
+    letterSpacing: 0,
   },
-  // Placeholder for keypad, if you decide to build a custom one
-  // keypadContainer: {
-  //   marginTop: 20,
-  //   alignItems: 'center',
-  //   width: '100%',
-  // }
+  resendButtonDisabled: {
+    backgroundColor: "#B2B5BD",
+  },
+  resendButtonEnabled: {
+    backgroundColor: "#3800FF",
+  },
 });
